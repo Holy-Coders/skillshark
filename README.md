@@ -9,18 +9,16 @@
 
 ## Install
 
-Zero-install, straight from GitHub:
+Zero-install:
 
 ```sh
-npx github:AaronDovTurkel/skillshark install <link>
+npx skillshark install <link>
 ```
 
-Or globally from a checkout:
+Or globally:
 
 ```sh
-git clone https://github.com/AaronDovTurkel/skillshark && cd skillshark
-npm install
-npm link          # makes `skillshark` available globally
+npm install -g skillshark
 ```
 
 Requirements: Node ≥ 20. **Senders** also need the [GitHub CLI](https://cli.github.com) authenticated (`gh auth login`). **Receivers need nothing** — public links are fetched over plain anonymous HTTPS.

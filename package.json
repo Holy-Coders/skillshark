@@ -11,14 +11,6 @@
     "src",
     "README.md"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/AaronDovTurkel/skillshark.git"
-  },
-  "homepage": "https://github.com/AaronDovTurkel/skillshark#readme",
-  "bugs": {
-    "url": "https://github.com/AaronDovTurkel/skillshark/issues"
-  },
   "keywords": [
     "claude-code",
     "agent-skills",
