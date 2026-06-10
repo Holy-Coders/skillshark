@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SkillShark — share agent skills like files</title>
-<meta name="description" content="SkillShark packages a Claude Code skill into a secret GitHub gist and hands you an unlisted, self-verifying link. One command out, one command in. No server.">
+<meta name="description" content="Share agent skills like files. SkillShark packages a skill from Claude Code, Cursor, Codex, Copilot, Windsurf, Gemini CLI, or opencode into a secret gist and hands you a paste-and-go install one-liner. Verified installs, cross-agent conversion, GitHub Enterprise support. No server.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;500;700;800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
@@ -231,6 +231,25 @@
   }
   .cmd pre .c-dim { color: var(--faint); }
 
+  /* ---- agents table + shell blocks ---- */
+  .lead { color: var(--dim); max-width: 72ch; font-size: 14px; }
+  .table-scroll { overflow-x: auto; margin: 18px 0; }
+  .agent-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+  .agent-table th, .agent-table td { text-align: left; padding: 9px 14px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+  .agent-table th { color: var(--glow); font-family: var(--mono-disp); font-weight: 700; font-size: 11.5px; letter-spacing: .08em; }
+  .agent-table td { color: var(--dim); }
+  .agent-table td:first-child { color: var(--foam); white-space: nowrap; }
+  .agent-table code { background: rgba(255,255,255,.05); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--foam); }
+  .shell {
+    margin: 18px 0; padding: 14px 18px; border-radius: 8px; overflow-x: auto;
+    background: rgba(3,6,10,.65); border: 1px solid var(--pane-edge);
+    color: var(--foam); font-size: 13px; line-height: 1.7;
+  }
+  .shell .c-dim { color: var(--dim); }
+  .shell .c-url { color: var(--url); }
+  .grid-note { color: var(--dim); font-size: 13.5px; margin-top: 20px; }
+  .grid-note code { background: rgba(255,255,255,.05); padding: 1px 6px; border-radius: 4px; color: var(--foam); font-size: 12.5px; }
+
   /* ---- security ---- */
   .sec-list { list-style: none; margin: 0; padding: 0; max-width: 76ch; }
   .sec-list li {
@@ -346,7 +365,7 @@
       <div class="step reveal">
         <div class="n">[3/3] INSTALL</div>
         <h3>install</h3>
-        <p><code>npx skillshark install &lt;link&gt;</code> fetches anonymously, verifies every byte, shows a preview, asks consent, and copies files into the right <code>.claude/</code> path. Works from any public repo too: <code>gh:owner/repo/path@ref</code>.</p>
+        <p>They paste the one-liner. It fetches, verifies every byte, shows a preview, asks consent, and copies files into the right place for <em>their</em> tool — rename with <code>--name</code>, cross tools with <code>--agent</code>. Works from any public repo too: <code>gh:owner/repo/path@ref</code>.</p>
       </div>
     </div>
   </section>
@@ -377,11 +396,44 @@ $ skillshark install gh:acme/skills/review@main</pre>
       </div>
       <div class="cmd reveal">
         <h3><span class="verb">revoke</span> &lt;id|name&gt;</h3>
-        <p>Deletes the gist via your gh auth. The link dies; installers get an honest message.</p>
+        <p>Deletes the gist via your gh auth — it remembers which host a share went to. The link dies; installers get an honest message.</p>
         <pre>$ skillshark revoke j
 <span class="c-dim"># → "This share was deleted by the sender."</span></pre>
       </div>
     </div>
+    <p class="grid-note reveal">Prefer menus? Run bare <code>skillshark</code> for an interactive session: a picker over
+    every skill on your machine, paste-a-link installs, guided revokes, spinners on the slow parts.
+    Bare <code>skillshark share</code> / <code>install</code> / <code>inspect</code> / <code>revoke</code> jump straight to that command's wizard.</p>
+  </section>
+
+  <!-- ================= CROSSING AGENTS · 2500m ================= -->
+  <section>
+    <span class="depth">2 500 m · bathypelagic</span>
+    <p class="kicker">crossing agents</p>
+    <h2>Share from one tool, install to another</h2>
+    <p class="lead">Bare names resolve across all seven tools' conventions when you share, and
+    <code style="color:var(--foam)">--agent</code> re-renders the instructions in another tool's dialect when you install.
+    A Codex prompt can land as a Cursor command; a Claude skill can become a Gemini TOML command.</p>
+    <div class="table-scroll reveal">
+      <table class="agent-table">
+        <thead><tr><th>--agent</th><th>artifacts</th><th>where they land</th></tr></thead>
+        <tbody>
+          <tr><td>claude-code</td><td>skills · commands</td><td><code>.claude/skills/&lt;n&gt;/</code> · <code>.claude/commands/&lt;n&gt;.md</code></td></tr>
+          <tr><td>cursor</td><td>rules · commands</td><td><code>.cursor/rules/&lt;n&gt;.mdc</code> · <code>.cursor/commands/&lt;n&gt;.md</code></td></tr>
+          <tr><td>codex</td><td>prompts</td><td><code>~/.codex/prompts/&lt;n&gt;.md</code> (global only)</td></tr>
+          <tr><td>copilot</td><td>prompt files</td><td><code>.github/prompts/&lt;n&gt;.prompt.md</code></td></tr>
+          <tr><td>windsurf</td><td>rules · workflows</td><td><code>.windsurf/rules/&lt;n&gt;.md</code> · <code>.windsurf/workflows/&lt;n&gt;.md</code></td></tr>
+          <tr><td>gemini</td><td>commands</td><td><code>.gemini/commands/&lt;n&gt;.toml</code> (TOML dialect)</td></tr>
+          <tr><td>opencode</td><td>commands</td><td><code>.opencode/command/&lt;n&gt;.md</code> · <code>~/.config/opencode/…</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="shell reveal">$ skillshark share draftpr                  <span class="c-dim"># found in ~/.codex/prompts/draftpr.md</span>
+$ skillshark install &lt;link&gt; --agent cursor  <span class="c-dim"># lands as .cursor/commands/draftpr.md</span>
+$ skillshark install &lt;link&gt; --name jmp      <span class="c-dim"># rename on the way in (frontmatter too)</span></pre>
+    <p class="lead">Two honest limits, stated loudly at install time: a skill's bundled
+    <code style="color:var(--foam)">scripts/</code> can't follow it across tools (every file left behind is named in the
+    warning), and conversion is best-effort — read the result. Same-agent installs are always byte-verbatim.</p>
   </section>
 
   <!-- ================= SECURITY · 4000m ================= -->
@@ -401,6 +453,23 @@ $ skillshark install gh:acme/skills/review@main</pre>
       and a skill is <em>instructions an AI will obey</em>. SkillShark makes installs informed and tamper-evident,
       not safe-from-strangers. Share with people you trust; read what people send you.
     </div>
+  </section>
+
+  <!-- ================= ENTERPRISE · 6000m ================= -->
+  <section>
+    <span class="depth">6 000 m · hadal zone</span>
+    <p class="kicker">enterprise</p>
+    <h2>Private waters</h2>
+    <p class="lead">Company runs GitHub Enterprise? SkillShark works entirely inside it — gists live on
+    <em>your</em> GitHub, links carry their host, and nothing about your skills ever touches public github.com.</p>
+    <pre class="shell reveal">$ gh auth login --hostname ghe.corp.com     <span class="c-dim"># once — senders and receivers alike</span>
+$ skillshark share j --host ghe.corp.com
+<span class="c-dim"># clipboard →</span> npx skillshark install <span class="c-url">'https://ghe.corp.com/gist/&lt;id&gt;#fp=…'</span></pre>
+    <ul class="sec-list reveal">
+      <li><b>Links route themselves.</b> Enterprise URLs carry their host — receivers never need a flag. <b>GH_HOST</b> sets the default for bare ids and <b>gh:owner/repo</b> sources.</li>
+      <li><b>No anonymous requests, ever.</b> Enterprise links are fetched exclusively through the receiver's own gh auth (enforced by tests). Unauthenticated users get a precise <b>gh auth login --hostname …</b> pointer, not a leak.</li>
+      <li><b>One honest cap.</b> The gists API truncates inline content at ~1 MB, so enterprise gist shares stop at ~900 KB encoded — bigger skills go in a repo on your GHES, shared as <b>gh:owner/repo/path</b>.</li>
+    </ul>
   </section>
 
   <!-- ================= THE DEEP ================= -->

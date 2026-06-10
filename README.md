@@ -127,7 +127,7 @@ Public github.com behavior is completely unchanged: receivers still need no acco
 - **Executable bits are stripped by default.** Executables are flagged in the preview; `--allow-exec` is required to keep them.
 - **Everything is verified.** Per-file sha256 checksums and a tree fingerprint are checked after extraction; path traversal, symlinks, absolute paths, decompression bombs, and oversized payloads all abort the install with nothing written.
 - **Links are self-verifying.** `share` appends `#fp=<fingerprint>` to the URL; `install` recomputes the fingerprint from the downloaded bytes and hard-fails on mismatch — if the gist was edited after sharing, you'll know.
-- **Receivers need no GitHub account.** The receive path uses anonymous HTTPS only and provably never invokes `gh` (enforced by tests).
+- **Receivers need no GitHub account** for public github.com links — that receive path uses anonymous HTTPS only and provably never invokes `gh` (enforced by tests). GitHub Enterprise links are the deliberate inverse: they ride *only* the receiver's own `gh` auth, so nothing private ever travels anonymously.
 
 The honest framing: a skill is *instructions an AI will obey*. SkillShark is for sharing between people who already trust each other — it makes installs informed and tamper-evident, not safe-from-strangers. Read the preview.
 
