@@ -79,24 +79,31 @@
   header { padding: 88px 0 24px; position: relative; }
   .waterline {
     color: var(--faint); font-size: 13px; line-height: 1.2;
-    white-space: pre; overflow: hidden; position: relative; height: 3.4em;
+    white-space: pre; overflow: hidden; position: relative; height: 13.4em;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
             mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
   }
-  .fin {
-    position: absolute; bottom: 1.15em; left: 0;
-    color: var(--glow); text-shadow: 0 0 12px var(--glow-soft);
-    animation: swim 17s linear infinite;
+  @media (max-width: 700px) { .waterline { font-size: 10px; } }
+  .swimmer {
+    position: absolute; top: 0; left: 0; z-index: 1;
+    margin: 0; font-size: inherit; line-height: inherit;
+    animation: swim 26s linear infinite;
     white-space: pre;
   }
+  .swimmer .fin-top { color: var(--glow); text-shadow: 0 0 12px var(--glow-soft); }
+  .swimmer .fin-body { color: var(--faint); opacity: .8; }
+  .swimmer .eye { color: var(--glow); text-shadow: 0 0 8px var(--glow); }
+  .tildes {
+    position: absolute; top: 6em; left: 0; right: 0; z-index: 2;
+    animation: bob 5s ease-in-out infinite alternate;
+  }
   @keyframes swim {
-    0%   { transform: translateX(-12ch) scaleX(1); }
+    0%   { transform: translateX(-62ch) scaleX(1); }
     49%  { transform: translateX(calc(100vw + 4ch)) scaleX(1); }
     50%  { transform: translateX(calc(100vw + 4ch)) scaleX(-1); }
-    99%  { transform: translateX(-12ch) scaleX(-1); }
-    100% { transform: translateX(-12ch) scaleX(1); }
+    99%  { transform: translateX(-62ch) scaleX(-1); }
+    100% { transform: translateX(-62ch) scaleX(1); }
   }
-  .tildes { animation: bob 5s ease-in-out infinite alternate; display: inline-block; }
   @keyframes bob { from { transform: translateY(0); } to { transform: translateY(3px); } }
 
   h1 {
@@ -279,11 +286,17 @@
   <!-- ================= HERO · 0m ================= -->
   <header>
     <span class="depth" style="top:90px">0 m · surface</span>
-    <div class="waterline" aria-hidden="true"><span class="fin" id="fin">    /|
-   / |
-  /  |
- /___|</span>
-<span class="tildes">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</span></div>
+    <div class="waterline" aria-hidden="true"><pre class="swimmer"><span class="fin-top">                    |\
+                    | \
+                    |  \
+                    ;   \
+                    :    \</span>
+
+<span class="fin-body">  \      _____,,--''      ''--,,______
+   \ ,-''                             ''-,_
+    X.          (((            <span class="eye">o</span>          '=,&gt;
+   / '--,,_______________   ______,,,---''
+  /                      '-,'</span></pre><span class="tildes">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</span></div>
 
     <h1>SKILL<span class="shark-k">SHARK</span></h1>
     <p class="tagline">Share an agent skill like you'd share a <b>file</b>. One command out, one command in — unlisted, revocable, self-verifying links.</p>
@@ -391,25 +404,26 @@ $ skillshark install gh:acme/skills/review@main</pre>
   <!-- ================= THE DEEP ================= -->
   <footer>
     <span class="depth">10 911 m · challenger deep</span>
-    <div class="shark-art" aria-hidden="true">                                     ,
-                                   .';
-               .--------------.  .' (
-              /                \/    ;
-   ______    /                  \    |
-  /      '--'   skillshark       \   |
- |  ________     v0.1.0       <span class="eye">o</span>  '--'-----.____
-  \ \      '-.                              _.-'
-   \ \        '----.____________     ___.--'
-    '-'             \           \---/   \
-                     \           \ /     '.
-                      '._________'/        '-.
-                                 /____________.'</div>
+    <div class="shark-art" aria-hidden="true">                                      |\
+                                      | \
+                                      |  \
+                                      ;   \
+                                      :    \
+                                      :     \
+   \,         ________,,,---''''       ''---,,,_______
+    \\  ,,-'''                                        ''--,_
+     \\'                    s k i l l s h a r k            ''-,_
+      X:,          ((((                          <span class="eye">o</span>              '=,&gt;
+     //.,,               ____________________                _,,-''
+    //    '''---,,,,---''     \  \          ''---,,,,,---'''
+   /'                          \  '-,_
+                                '-,,_ '</div>
     <p class="abyss-line">YOU HAVE REACHED THE BOTTOM · NOTHING IS RUNNING DOWN HERE</p>
     <p class="no-server">there is no server — github is the backend</p>
     <div class="foot-links">
       <a href="https://www.npmjs.com/package/skillshark">npm install -g skillshark</a> ·
       <a href="https://github.com/Holy-Coders/skillshark">source</a> ·
-      MIT © Aaron Turkel
+      MIT © Holy Coders
     </div>
   </footer>
 

@@ -27,7 +27,7 @@
     "cli",
     "sharing"
   ],
-  "author": "Aaron Turkel",
+  "author": "Holy Coders",
   "engines": {
     "node": ">=20"
   },
