@@ -1,9 +1,12 @@
-// Repo transport (install-only in v0.1): gh:owner/repo[/path][@ref], fetched
-// anonymously from api.github.com + codeload. The one integrity anchor is the
-// commit SHA; #fp= does not apply here (§4.2).
+// Repo transport (install-only): gh:owner/repo[/path][@ref], fetched
+// anonymously from api.github.com + codeload for public github.com, or
+// entirely through the receiver's gh auth for GitHub Enterprise hosts —
+// no anonymous request ever leaves for an enterprise host. The integrity
+// anchor is the commit SHA; #fp= does not apply here (§4.2).
 import { CliError } from '../errors.js';
 import { USER_AGENT } from '../version.js';
 import { extractTarball } from '../pkg.js';
+import { DEFAULT_HOST } from '../source.js';
 
 export const REPO_TARBALL_LIMIT = 50 * 1024 * 1024;
 const FETCH_HEADERS = {
@@ -60,38 +63,68 @@ export function subtreeMapper(subPath) {
   };
 }
 
-// Resolve ref → commit SHA (pinned installs skip the API entirely), download
-// the codeload tarball, and extract just the subtree through the §7.2 guards.
-export async function fetchRepoTree({ owner, repo, path: subPath, ref }, destDir, { fetch }) {
+async function ghJson(ghApi, host, apiPath, what) {
+  let stdout;
+  try {
+    stdout = await ghApi(['--hostname', host, apiPath]);
+  } catch (err) {
+    if (err instanceof CliError && /404/.test(err.message)) {
+      throw new CliError(`${what} not found on ${host}.`, 1);
+    }
+    throw err;
+  }
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    throw new CliError(`Unexpected response from ${host} for ${what}.`, 1);
+  }
+}
+
+// Resolve ref → commit SHA (pinned public installs skip the API entirely),
+// download the tarball, and extract just the subtree through the §7.2 guards.
+export async function fetchRepoTree({ owner, repo, path: subPath, ref, host = DEFAULT_HOST }, destDir, { fetch, ghApi = null }) {
+  const enterprise = host !== DEFAULT_HOST;
+  if (enterprise && !ghApi) throw new CliError(`Can't reach ${host} without gh.`, 2);
   let sha;
   if (ref && /^[0-9a-f]{40}$/.test(ref)) {
     sha = ref;
   } else {
     let resolvedRef = ref;
     if (!resolvedRef) {
-      const repoInfo = await getJson(fetch, `https://api.github.com/repos/${owner}/${repo}`, `Repository ${owner}/${repo}`);
+      const repoInfo = enterprise
+        ? await ghJson(ghApi, host, `repos/${owner}/${repo}`, `Repository ${owner}/${repo}`)
+        : await getJson(fetch, `https://api.github.com/repos/${owner}/${repo}`, `Repository ${owner}/${repo}`);
       resolvedRef = repoInfo.default_branch;
       if (!resolvedRef) throw new CliError(`Repository ${owner}/${repo} has no default branch.`, 1);
     }
-    const commit = await getJson(
-      fetch,
-      `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(resolvedRef)}`,
-      `Ref "${resolvedRef}" in ${owner}/${repo}`,
-    );
+    const commitPath = `repos/${owner}/${repo}/commits/${encodeURIComponent(resolvedRef)}`;
+    const commit = enterprise
+      ? await ghJson(ghApi, host, commitPath, `Ref "${resolvedRef}" in ${owner}/${repo}`)
+      : await getJson(fetch, `https://api.github.com/${commitPath}`, `Ref "${resolvedRef}" in ${owner}/${repo}`);
     sha = commit.sha;
     if (!sha) throw new CliError(`Could not resolve "${resolvedRef}" to a commit in ${owner}/${repo}.`, 1);
   }
 
-  let res;
-  try {
-    res = await fetch(`https://codeload.github.com/${owner}/${repo}/tar.gz/${sha}`, {
-      headers: { 'User-Agent': USER_AGENT },
-    });
-  } catch (e) {
-    throw new CliError(`Network error downloading the repo tarball: ${e.message}`, 1);
+  let tarball;
+  if (enterprise) {
+    // gh follows the tarball redirect and emits the bytes on stdout
+    tarball = await ghApi(['--hostname', host, `repos/${owner}/${repo}/tarball/${sha}`], { binary: true });
+    if (!Buffer.isBuffer(tarball)) tarball = Buffer.from(tarball);
+    if (tarball.length > REPO_TARBALL_LIMIT) {
+      throw new CliError(`The repo tarball exceeds the ${Math.floor(REPO_TARBALL_LIMIT / (1024 * 1024))} MB limit.`, 1);
+    }
+  } else {
+    let res;
+    try {
+      res = await fetch(`https://codeload.github.com/${owner}/${repo}/tar.gz/${sha}`, {
+        headers: { 'User-Agent': USER_AGENT },
+      });
+    } catch (e) {
+      throw new CliError(`Network error downloading the repo tarball: ${e.message}`, 1);
+    }
+    if (!res.ok) throw new CliError(`Could not download ${owner}/${repo}@${sha.slice(0, 7)} (HTTP ${res.status}).`, 1);
+    tarball = await readBodyCapped(res, REPO_TARBALL_LIMIT, 'The repo tarball');
   }
-  if (!res.ok) throw new CliError(`Could not download ${owner}/${repo}@${sha.slice(0, 7)} (HTTP ${res.status}).`, 1);
-  const tarball = await readBodyCapped(res, REPO_TARBALL_LIMIT, 'The repo tarball');
 
   await extractTarball(tarball, destDir, { transformPath: subtreeMapper(subPath) });
   return { sha };

@@ -1,6 +1,6 @@
 {
   "name": "skillshark",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Share agent skills like files — secret gists out, safe verified installs in. No server; GitHub is the backend.",
   "type": "module",
   "bin": {

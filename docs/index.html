@@ -306,8 +306,8 @@
       <code id="npx-cmd"><span class="p">$</span> npx skillshark install &lt;link&gt;</code>
       <button id="copy-btn" type="button" aria-label="Copy npx command">COPY</button>
     </div>
-    <p class="meta-links">v0.2.0 · <a href="https://www.npmjs.com/package/skillshark">npm</a> · MIT · Claude Code · Cursor · Codex · Copilot · Windsurf · Gemini CLI · opencode</p>
-    <p class="meta-links">beta channel (latest from main): <code>npx github:Holy-Coders/skillshark</code> · bare <code>skillshark</code> opens an interactive session</p>
+    <p class="meta-links">v0.3.0 · <a href="https://www.npmjs.com/package/skillshark">npm</a> · MIT · Claude Code · Cursor · Codex · Copilot · Windsurf · Gemini CLI · opencode</p>
+    <p class="meta-links">beta channel (latest from main): <code>npx github:Holy-Coders/skillshark</code> · bare <code>skillshark</code> opens an interactive session · GitHub Enterprise: <code>--host ghe.corp.com</code></p>
   </header>
 
   <!-- ================= THE HANDOFF · 200m ================= -->
@@ -336,7 +336,7 @@
       <div class="step reveal">
         <div class="n">[1/3] PACK</div>
         <h3>share</h3>
-        <p><code>skillshark share /j</code> finds the skill in <code>.claude/skills</code>, infers the manifest (you never write one), scrubs <code>.env</code> and key-shaped files, and uploads a tarball as a <em>secret gist</em>. The link lands on your clipboard.</p>
+        <p><code>skillshark share /j</code> finds the skill in <code>.claude/skills</code>, infers the manifest (you never write one), scrubs <code>.env</code> and key-shaped files, and uploads a tarball as a <em>secret gist</em>. The full <code>npx skillshark install '…'</code> one-liner lands on your clipboard — receivers just paste it. On GitHub Enterprise, add <code>--host</code> and nothing leaves your company's GitHub.</p>
       </div>
       <div class="step reveal">
         <div class="n">[2/3] PASTE</div>
@@ -483,12 +483,12 @@ $ skillshark install gh:acme/skills/review@main</pre>
     ['print', [['c-warn','  ⚠ Skipped .env (secret pattern)'], ['c-dim',' — pass --force to include']]],
     ['print', [['', '']]],
     ['print', [['c-ok','  ✓ Uploaded as a secret gist'], ['c-dim',' (unlisted — anyone with the link can read it)']]],
-    ['print', [['c-ok','  ✓ Link copied to clipboard'], ['c-dim',' · advisory expiry in 7 days']]],
+    ['print', [['c-ok','  ✓ Install one-liner copied to clipboard'], ['c-dim',' — they just paste it · expires in 7 days']]],
     ['print', [['', '']]],
-    ['print', [['c-url','  ' + LINK]]],
+    ['print', [['','  npx skillshark install '], ['c-url',"'" + LINK + "'"]]],
     ['print', [['', '']]],
-    ['print', [['c-dim','  They run:   skillshark install <the link>     (no GitHub account needed)']]],
-    ['print', [['c-dim','  Undo:       skillshark revoke j               (deletes the gist)']]]
+    ['print', [['c-dim','  Link only:  ' + LINK.slice(0, 44) + '…   (no GitHub account needed)']]],
+    ['print', [['c-dim','  Undo:       skillshark revoke j   (deletes the gist)']]]
   ];
 
   var RECV = [

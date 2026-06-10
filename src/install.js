@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { CliError, MSG } from './errors.js';
-import { parseSource, formatSource } from './source.js';
+import { parseSource, formatSource, resolveHost } from './source.js';
 import { fetchGistPackage } from './transports/gist.js';
 import { fetchRepoTree } from './transports/repo.js';
 import { extractTarball, hashTree, readManifest, verifyTreeAgainstManifest, MANIFEST_NAME } from './pkg.js';
@@ -35,12 +35,13 @@ function classifyRepoTree(actual, subPath, repo) {
   return { type: 'bundle', agent: '' };
 }
 
-export async function fetchAndVerify(sourceStr, deps) {
-  const src = parseSource(sourceStr);
+export async function fetchAndVerify(sourceStr, deps, opts = {}) {
+  const defaultHost = resolveHost(opts, deps);
+  const src = parseSource(sourceStr, { defaultHost });
   const workDir = await mkdtemp(path.join(os.tmpdir(), 'skillshark-recv-'));
 
   if (src.kind === 'gist') {
-    const gist = await fetchGistPackage(src.id, { fetch: deps.fetch });
+    const gist = await fetchGistPackage(src.id, { fetch: deps.fetch, host: src.host, ghApi: deps.ghApi });
     await extractTarball(gist.tarball, workDir);
     const manifest = await readManifest(workDir);
     const actual = await hashTree(workDir);
@@ -55,13 +56,13 @@ export async function fetchAndVerify(sourceStr, deps) {
       fingerprint,
       sender: gist.owner,
       fpVerified: Boolean(src.fp),
-      sourceRecord: `gist:${src.id}@${gist.revision ?? 'unknown'}`,
+      sourceRecord: `${formatSource({ ...src })}@${gist.revision ?? 'unknown'}`,
     };
   }
 
   // repo: no manifest exists; run the share-side inference on the extracted
   // tree and synthesize one in memory. The commit SHA is the integrity.
-  const { sha } = await fetchRepoTree(src, workDir, { fetch: deps.fetch });
+  const { sha } = await fetchRepoTree(src, workDir, { fetch: deps.fetch, ghApi: deps.ghApi });
   const actual = await hashTree(workDir, { exclude: [] });
   if (actual.length === 0) {
     throw new CliError(`No files found at gh:${src.owner}/${src.repo}${src.path ? `/${src.path}` : ''}@${sha.slice(0, 7)}.`, 1);
@@ -379,7 +380,7 @@ export async function runInstall(sourceStr, opts, deps) {
   const interactive = deps.isTTY && !opts.yes;
   const loud = !opts.json && !opts.quiet;
   const ui = deps.ui;
-  const verified = await ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps));
+  const verified = await ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps, opts));
   const { workDir, manifest, fingerprint, sourceRecord } = verified;
 
   try {
@@ -615,8 +616,8 @@ function installTargetsLine(manifest) {
 export async function runInspect(sourceStr, opts, deps) {
   const ui = deps.ui;
   const verified = await (opts.json || opts.files
-    ? fetchAndVerify(sourceStr, deps)
-    : ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps)));
+    ? fetchAndVerify(sourceStr, deps, opts)
+    : ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps, opts)));
   const { workDir, manifest } = verified;
   try {
     if (opts.json) {

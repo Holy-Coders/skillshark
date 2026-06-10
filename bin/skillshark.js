@@ -33,9 +33,17 @@ GLOBAL OPTIONS
   -y, --yes        Skip prompts (non-interactive)
   -q, --quiet      Print only the essential result (URL or path)
       --json       Machine-readable output
+      --host <h>   GitHub Enterprise hostname (default github.com; also
+                   honors GH_HOST). Enterprise links carry their host, so
+                   receivers usually don't need this flag.
       --no-color   Disable color (NO_COLOR is also honored)
   -h, --help       Show help (try: skillshark help <command>)
   -V, --version    Show version
+
+ENTERPRISE (privacy)
+  skillshark share j --host ghe.corp.com    share on your GHES — never leaves it
+  Enterprise links are fetched through YOUR gh auth (gh auth login --hostname
+  ghe.corp.com); no anonymous request ever touches an enterprise host.
 
 EXAMPLES
   skillshark                                interactive: menus for everything below
@@ -111,6 +119,7 @@ const GLOBAL_FLAGS = {
   yes: { short: 'y', key: 'yes' },
   quiet: { short: 'q', key: 'quiet' },
   json: { key: 'json' },
+  host: { takesValue: true, key: 'host' },
   'no-color': { key: 'noColor' },
   help: { short: 'h', key: 'help' },
   version: { short: 'V', key: 'version' },

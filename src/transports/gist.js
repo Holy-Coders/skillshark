@@ -1,12 +1,19 @@
 // Gist transport. Share/revoke go through `gh` (the sender's auth); the
-// receive path is ANONYMOUS https only — it must never invoke gh (§0.3).
+// public github.com receive path is ANONYMOUS https only — it must never
+// invoke gh (§0.3). GitHub Enterprise links are the deliberate exception:
+// privacy means everything rides the receiver's own gh auth and no anonymous
+// request ever leaves for the enterprise host.
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { CliError, MSG } from '../errors.js';
 import { USER_AGENT } from '../version.js';
+import { DEFAULT_HOST } from '../source.js';
 
 export const GIST_PAYLOAD_LIMIT = 5 * 1024 * 1024; // encoded bytes (§4.1)
+// the gists API truncates inline file content at ~1 MB; on enterprise hosts we
+// can't fall back to an anonymous raw_url fetch, so shares are capped honestly
+export const ENTERPRISE_INLINE_LIMIT = 900 * 1024;
 const FETCH_HEADERS = {
   Accept: 'application/vnd.github+json',
   'User-Agent': USER_AGENT,
@@ -22,9 +29,19 @@ export function gistDescription({ name, agent, type, fp8 }) {
   return `skillshark: ${name} (${kind}) · fp ${fp8}`;
 }
 
+function hostFlags(host) {
+  return host && host !== DEFAULT_HOST ? ['--hostname', host] : [];
+}
+
 // One `gh api gists --method POST --input <tmp.json>` call; a JSON body file
 // avoids every shell-escaping pitfall (hard rule 3).
-export async function createGist({ manifestJson, primaryDoc, tarballB64, description, ghApi }) {
+export async function createGist({ manifestJson, primaryDoc, tarballB64, description, ghApi, host = DEFAULT_HOST }) {
+  if (host !== DEFAULT_HOST && tarballB64.length > ENTERPRISE_INLINE_LIMIT) {
+    throw new CliError(
+      `That's too big for an enterprise gist share (~${Math.floor(ENTERPRISE_INLINE_LIMIT / 1024)} KB encoded cap — the API truncates larger files and enterprise receivers can't fetch around it anonymously). Put it in a repo on ${host} instead.`,
+      2,
+    );
+  }
   const files = { 'SKILLSHARK.json': { content: manifestJson } };
   if (primaryDoc && primaryDoc.content.trim()) {
     files[path.basename(primaryDoc.name)] = { content: primaryDoc.content };
@@ -36,7 +53,7 @@ export async function createGist({ manifestJson, primaryDoc, tarballB64, descrip
   const bodyFile = path.join(tmpDir, 'gist-body.json');
   try {
     await writeFile(bodyFile, JSON.stringify(body));
-    const stdout = await ghApi(['gists', '--method', 'POST', '--input', bodyFile]);
+    const stdout = await ghApi([...hostFlags(host), 'gists', '--method', 'POST', '--input', bodyFile]);
     let parsed;
     try {
       parsed = JSON.parse(stdout);
@@ -44,14 +61,14 @@ export async function createGist({ manifestJson, primaryDoc, tarballB64, descrip
       throw new CliError('Unexpected response from gh while creating the gist.', 1);
     }
     if (!parsed.id) throw new CliError('gh created no gist (no id in response).', 1);
-    return { id: parsed.id, revision: parsed.history?.[0]?.version ?? null };
+    return { id: parsed.id, revision: parsed.history?.[0]?.version ?? null, htmlUrl: parsed.html_url ?? null };
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }
 }
 
-export async function deleteGist(id, { ghApi }) {
-  await ghApi(['--method', 'DELETE', `gists/${id}`]);
+export async function deleteGist(id, { ghApi, host = DEFAULT_HOST }) {
+  await ghApi([...hostFlags(host), '--method', 'DELETE', `gists/${id}`]);
 }
 
 // --- receive side (anonymous fetch, no gh — ever) ---------------------------
@@ -70,25 +87,50 @@ async function readBodyCapped(res, cap, what) {
   return Buffer.concat(chunks);
 }
 
-export async function fetchGistPackage(id, { fetch }) {
-  let res;
-  try {
-    res = await fetch(`https://api.github.com/gists/${id}`, { headers: FETCH_HEADERS });
-  } catch (e) {
-    throw new CliError(`Network error reaching GitHub: ${e.message}`, 1);
+export async function fetchGistPackage(id, { fetch, host = DEFAULT_HOST, ghApi = null }) {
+  let data;
+  if (host !== DEFAULT_HOST) {
+    // GitHub Enterprise: private by nature. Everything goes through the
+    // receiver's own gh auth; no anonymous request touches the host.
+    if (!ghApi) throw new CliError(`Can't reach ${host} without gh.`, 2);
+    let stdout;
+    try {
+      stdout = await ghApi(['--hostname', host, `gists/${id}`]);
+    } catch (err) {
+      if (err instanceof CliError && /404/.test(err.message)) throw new CliError(MSG.gistDeleted, 1);
+      throw err;
+    }
+    try {
+      data = JSON.parse(stdout);
+    } catch {
+      throw new CliError(`Unexpected response from ${host} while fetching the gist.`, 1);
+    }
+  } else {
+    let res;
+    try {
+      res = await fetch(`https://api.github.com/gists/${id}`, { headers: FETCH_HEADERS });
+    } catch (e) {
+      throw new CliError(`Network error reaching GitHub: ${e.message}`, 1);
+    }
+    if (res.status === 404) throw new CliError(MSG.gistDeleted, 1);
+    if (res.status === 403 || res.status === 429) {
+      throw new CliError('GitHub rate limit hit (anonymous reads are 60/hour per IP). Try again in a bit.', 1);
+    }
+    if (!res.ok) throw new CliError(`GitHub API error fetching the gist (HTTP ${res.status}).`, 1);
+    data = await res.json();
   }
-  if (res.status === 404) throw new CliError(MSG.gistDeleted, 1);
-  if (res.status === 403 || res.status === 429) {
-    throw new CliError('GitHub rate limit hit (anonymous reads are 60/hour per IP). Try again in a bit.', 1);
-  }
-  if (!res.ok) throw new CliError(`GitHub API error fetching the gist (HTTP ${res.status}).`, 1);
-  const data = await res.json();
 
   const pkgFile = data.files?.['package.tgz.b64'];
   if (!pkgFile) {
     throw new CliError('No package at that link (the gist has no package.tgz.b64 — not a SkillShark share).', 1);
   }
   let b64;
+  if (pkgFile.truncated && host !== DEFAULT_HOST) {
+    throw new CliError(
+      `This enterprise share is too large to fetch inline (the ${host} API truncates files past ~1 MB). Ask the sender to share it as a repo path on ${host} instead.`,
+      1,
+    );
+  }
   if (pkgFile.truncated) {
     let raw;
     try {

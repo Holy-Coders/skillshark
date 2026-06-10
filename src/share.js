@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { CliError } from './errors.js';
+import { resolveHost, DEFAULT_HOST } from './source.js';
 import { resolveShareArg, collectFiles, inferMetadata, findExternalRefs } from './discover.js';
 import { buildTarball } from './pkg.js';
 import { treeFingerprint, fp8 } from './fingerprint.js';
@@ -153,15 +154,22 @@ export async function runShare(arg, opts, deps) {
     } catch { /* preview is optional */ }
   }
 
-  const { id, revision } = await ui.spin('Uploading as a secret gist', () =>
+  const host = resolveHost(opts, deps);
+  const { id, revision, htmlUrl } = await ui.spin('Uploading as a secret gist', () =>
     createGist({
       manifestJson,
       primaryDoc,
       tarballB64: b64,
       description: gistDescription({ name: manifest.name, agent: manifest.agent, type: manifest.type, fp8: shortFp }),
       ghApi: deps.ghApi,
+      host,
     }));
-  const url = `https://gist.github.com/${id}#fp=${shortFp}`;
+  // github.com gets the short canonical form; enterprise hosts keep the
+  // html_url GitHub handed back (subdomain isolation varies per install)
+  const base = host === DEFAULT_HOST ? `https://gist.github.com/${id}` : (htmlUrl ?? `https://${host}/gist/${id}`);
+  const url = `${base}#fp=${shortFp}`;
+  // the paste-and-go line: receivers run this with zero setup
+  const installCommand = `npx skillshark install '${url}'`;
 
   await addShareRecord(deps.configDir, {
     id,
@@ -169,37 +177,41 @@ export async function runShare(arg, opts, deps) {
     url,
     revision,
     expiresAt: manifest.expiresAt,
+    ...(host !== DEFAULT_HOST ? { host } : {}),
   });
 
   let copied = false;
   if (!opts.noClipboard && deps.clipboard) {
-    copied = await deps.clipboard(url);
+    copied = await deps.clipboard(installCommand);
   }
 
   if (opts.json) {
     ui.out(JSON.stringify({
       id,
       url,
+      installCommand,
       revision,
       expiresAt: manifest.expiresAt,
       fingerprint,
       size: manifest.totalSize,
       files: manifest.files.map((f) => f.path),
+      ...(host !== DEFAULT_HOST ? { host } : {}),
     }));
   } else if (opts.quiet) {
     ui.out(url);
   } else {
     ui.out('');
     ui.ok('Uploaded as a secret gist (unlisted — anyone with the link can read it)');
-    if (copied) ui.ok(`Link copied to clipboard · advisory expiry in ${expires.label}`);
+    if (copied) ui.ok(`Install one-liner copied to clipboard — they just paste it · advisory expiry in ${expires.label}`);
     else ui.out(`  Advisory expiry in ${expires.label}`);
     ui.out('');
-    ui.out(`  ${url}`);
+    ui.out(`  ${installCommand}`);
     ui.out('');
-    ui.out('  They run:   skillshark install <the link>     (no GitHub account needed)');
-    ui.out(`  Undo:       skillshark revoke ${manifest.name}               (deletes the gist)`);
+    const who = host === DEFAULT_HOST ? '(no GitHub account needed)' : `(needs gh auth on ${host})`;
+    ui.out(`  Link only:  ${url}   ${who}`);
+    ui.out(`  Undo:       skillshark revoke ${manifest.name}   (deletes the gist)`);
   }
-  return { status: 'shared', id, url, fingerprint };
+  return { status: 'shared', id, url, installCommand, fingerprint };
 }
 
 // --- revoke (§4.4) -----------------------------------------------------------
@@ -208,6 +220,7 @@ export async function runRevoke(idOrName, opts, deps) {
   const ui = deps.ui;
   let id = null;
   let label = idOrName;
+  let host = resolveHost(opts, deps);
   if (/^[0-9a-f]{20,32}$/.test(idOrName)) {
     id = idOrName;
   } else {
@@ -215,9 +228,14 @@ export async function runRevoke(idOrName, opts, deps) {
     if (rec) {
       id = rec.id;
       label = `${rec.name} (${rec.id})`;
+      if (rec.host) host = rec.host; // enterprise share → revoke on its host
     } else {
-      // cache miss → ask gh for our skillshark gists
-      const out = await deps.ghApi(['gists', '--paginate']);
+      // cache miss → ask gh for our skillshark gists (on the chosen host)
+      const out = await deps.ghApi([
+        ...(host !== DEFAULT_HOST ? ['--hostname', host] : []),
+        'gists',
+        '--paginate',
+      ]);
       let gists;
       try {
         gists = JSON.parse(out);
@@ -242,7 +260,7 @@ export async function runRevoke(idOrName, opts, deps) {
       return { status: 'cancelled' };
     }
   }
-  await deleteGist(id, { ghApi: deps.ghApi });
+  await deleteGist(id, { ghApi: deps.ghApi, host });
   await removeShareRecord(deps.configDir, id);
   if (opts.json) ui.out(JSON.stringify({ revoked: id }));
   else ui.ok(`Revoked — the gist ${id} is gone. Anyone holding the link now gets "deleted by the sender".`);

@@ -36,12 +36,14 @@ Requirements: Node ≥ 20. **Senders** also need the [GitHub CLI](https://cli.gi
 
 ## The four commands
 
-**share** — package a skill and get an unlisted link (auto-copied to your clipboard):
+**share** — package a skill and get an unlisted link. Your clipboard receives the full **paste-and-go install one-liner**, so the receiver just pastes it into any terminal:
 
 ```sh
 skillshark share /j
-# → https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#fp=3f9a7c21
+# clipboard → npx skillshark install 'https://gist.github.com/8a1bc94…#fp=3f9a7c21'
 ```
+
+(`-q` still prints the bare URL for scripts; `--json` includes both `url` and `installCommand`.)
 
 Accepts a name (`j`, `/j` — resolved across `./.claude/skills`, `./.claude/commands`, and their `~/` equivalents) or any path. Useful flags: `--expires 30m|6h|24h|7d|30d` (advisory, default 7d), `--dry-run`, `--name`, `--force`, `--no-clipboard`, `-q` (print only the URL).
 
@@ -101,6 +103,23 @@ Crossing agents **converts** the artifact: the instructions (frontmatter + body)
 - **Conversion is best-effort.** A skill written for one tool may assume features another doesn't have. Read the result.
 
 Same-agent installs are always byte-verbatim — conversion only happens when you cross.
+
+## GitHub Enterprise (v0.3)
+
+If your company runs GitHub Enterprise (GHES or `*.ghe.com`), SkillShark works entirely inside it — nothing touches public github.com:
+
+```sh
+gh auth login --hostname ghe.corp.com        # once, sender and receivers alike
+skillshark share j --host ghe.corp.com       # gist lives on YOUR GitHub
+skillshark install 'https://ghe.corp.com/gist/<id>#fp=<hex>'
+```
+
+- **Links carry their host.** Receivers don't need `--host` — an enterprise URL routes itself. `GH_HOST` (or `SKILLSHARK_HOST`) sets the default for bare ids and `gh:owner/repo` sources.
+- **The privacy property:** enterprise links are fetched exclusively through the receiver's own `gh` auth. No anonymous request ever leaves for an enterprise host (enforced by tests), and unauthenticated users get a clear `gh auth login --hostname …` pointer instead of a leak.
+- **One honest limit:** the gists API truncates inline content at ~1 MB and enterprise receivers can't fetch around it anonymously, so enterprise *gist* shares are capped at ~900 KB encoded. Bigger skills: put them in a repo on your GHES and share `gh:owner/repo/path` with `--host`.
+- `revoke` remembers which host a share went to and deletes it there.
+
+Public github.com behavior is completely unchanged: receivers still need no account and the receive path still never invokes `gh`.
 
 ## Security model
 
