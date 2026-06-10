@@ -248,7 +248,7 @@ test('share discovery: a cursor rule resolves by name with the right type/agent 
     body = JSON.parse(await readFile(args[args.indexOf('--input') + 1], 'utf8'));
     return JSON.stringify({ id: 'a'.repeat(32), history: [{ version: 'r' }] });
   };
-  await runShare('tabs', { noClipboard: true }, deps);
+  await runShare('tabs', { noClipboard: true, noEncrypt: true }, deps);
   const manifest = JSON.parse(body.files['SKILLSHARK.json'].content);
   assert.equal(manifest.type, 'rule');
   assert.equal(manifest.agent, 'cursor');
@@ -278,8 +278,8 @@ test('share discovery: codex prompts (global) and gemini TOML commands resolve b
     manifests.push(JSON.parse(JSON.parse(await readFile(args[args.indexOf('--input') + 1], 'utf8')).files['SKILLSHARK.json'].content));
     return JSON.stringify({ id: 'b'.repeat(32), history: [{ version: 'r' }] });
   };
-  await runShare('draftpr', { noClipboard: true }, deps);
-  await runShare('changelog', { noClipboard: true }, deps);
+  await runShare('draftpr', { noClipboard: true, noEncrypt: true }, deps);
+  await runShare('changelog', { noClipboard: true, noEncrypt: true }, deps);
   assert.equal(manifests[0].agent, 'codex');
   assert.equal(manifests[0].type, 'prompt');
   assert.equal(manifests[1].agent, 'gemini');
@@ -307,7 +307,7 @@ test('end-to-end dialect hop: share a gemini TOML, install it for claude-code', 
     gistBody = JSON.parse(await readFile(args[args.indexOf('--input') + 1], 'utf8'));
     return JSON.stringify({ id: GIST_ID, history: [{ version: 'r' }] });
   };
-  await runShare('release', { noClipboard: true }, shareDeps);
+  await runShare('release', { noClipboard: true, noEncrypt: true }, shareDeps);
 
   // rebuild the wire tarball from the captured gist body, then install it
   // cross-agent: a gemini command maps to a claude-code command

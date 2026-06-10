@@ -318,14 +318,14 @@
   /                      '-,'</span></pre><span class="tildes">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</span></div>
 
     <h1>SKILL<span class="shark-k">SHARK</span></h1>
-    <p class="tagline">Share an agent skill like you'd share a <b>file</b>. One command out, one command in — unlisted, revocable, self-verifying links.</p>
-    <p class="subline">No server. No registry. No new accounts. The GitHub you already have is the infrastructure: skills travel as secret gists, receivers need nothing but Node.</p>
+    <p class="tagline">Share an agent skill like you'd share a <b>file</b>. One command out, one command in — <b>encrypted</b>, revocable, self-verifying links.</p>
+    <p class="subline">No server. No registry. No new accounts. The GitHub you already have is the infrastructure: skills travel as encrypted gists (GitHub stores only ciphertext — the key rides in your link), receivers need nothing but Node.</p>
 
     <div class="npx">
       <code id="npx-cmd"><span class="p">$</span> npx skillshark install &lt;link&gt;</code>
       <button id="copy-btn" type="button" aria-label="Copy npx command">COPY</button>
     </div>
-    <p class="meta-links">v0.3.0 · <a href="https://www.npmjs.com/package/skillshark">npm</a> · MIT · Claude Code · Cursor · Codex · Copilot · Windsurf · Gemini CLI · opencode</p>
+    <p class="meta-links">v0.4.0 · <a href="https://www.npmjs.com/package/skillshark">npm</a> · MIT · Claude Code · Cursor · Codex · Copilot · Windsurf · Gemini CLI · opencode</p>
     <p class="meta-links">beta channel (latest from main): <code>npx github:Holy-Coders/skillshark</code> · bare <code>skillshark</code> opens an interactive session · GitHub Enterprise: <code>--host ghe.corp.com</code></p>
   </header>
 
@@ -442,6 +442,7 @@ $ skillshark install &lt;link&gt; --name jmp      <span class="c-dim"># rename o
     <p class="kicker">trust model</p>
     <h2>Paranoid by construction</h2>
     <ul class="sec-list">
+      <li><b>Encrypted at rest by default.</b> AES-256-GCM over the whole package, key derived (HKDF) from a fresh link secret + per-share salt. GitHub stores ciphertext and a stub with no name, no description, no file list. <b>--no-encrypt</b> opts out when you want the gist page readable.</li>
       <li><b>Never executes package content.</b> Install = copy files. No postinstall hooks, no scripts, ever.</li>
       <li><b>Executable bits stripped by default.</b> Flagged in the preview; <b>--allow-exec</b> is an explicit opt-in.</li>
       <li><b>Every byte verified.</b> Per-file sha256 + a tree fingerprint, checked after guarded extraction — path traversal, symlinks, absolute paths, decompression bombs all abort with nothing written.</li>
@@ -449,9 +450,10 @@ $ skillshark install &lt;link&gt; --name jmp      <span class="c-dim"># rename o
       <li><b>Receivers need no GitHub account.</b> The receive path is anonymous HTTPS only, and provably never shells out (enforced by tests).</li>
     </ul>
     <div class="warnbox">
-      <b>⚠ secret ≠ private.</b> A secret gist is unlisted, not encrypted — anyone holding the URL can read it,
-      and a skill is <em>instructions an AI will obey</em>. SkillShark makes installs informed and tamper-evident,
-      not safe-from-strangers. Share with people you trust; read what people send you.
+      <b>⚠ the link IS the key.</b> Anyone holding the full link can decrypt and install, and a lost link is
+      unrecoverable (just share again). A skill is <em>instructions an AI will obey</em>: SkillShark makes
+      installs private, informed, and tamper-evident — not safe-from-strangers. Share with people you trust;
+      read what people send you.
     </div>
   </section>
 
@@ -544,14 +546,15 @@ $ skillshark share j --host ghe.corp.com
   /* ---- terminal transcripts ---- */
   // each line: [mode, [ [class, text], ... ]]  mode: 'type' (char by char) | 'print'
   var FP = '3f9a7c21';
-  var LINK = 'https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#fp=' + FP;
+  var KEY = 'mO3rZk2vXq9wLp4tBn8cYd6fGh1jUs5aRiE0KQ7NvTw';
+  var LINK = 'https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#k=' + KEY + '&fp=' + FP;
 
   var SEND = [
     ['type',  [['c-prompt','$ '], ['c-cmd','skillshark share /j']]],
     ['print', [['c-dim','  Found skill "j" (claude-code) at .claude/skills/j — 2 files, 1.1 KB']]],
     ['print', [['c-warn','  ⚠ Skipped .env (secret pattern)'], ['c-dim',' — pass --force to include']]],
     ['print', [['', '']]],
-    ['print', [['c-ok','  ✓ Uploaded as a secret gist'], ['c-dim',' (unlisted — anyone with the link can read it)']]],
+    ['print', [['c-ok','  ✓ Encrypted (AES-256-GCM)'], ['c-dim',' — GitHub stores only ciphertext; the key rides in your link']]],
     ['print', [['c-ok','  ✓ Install one-liner copied to clipboard'], ['c-dim',' — they just paste it · expires in 7 days']]],
     ['print', [['', '']]],
     ['print', [['','  npx skillshark install '], ['c-url',"'" + LINK + "'"]]],

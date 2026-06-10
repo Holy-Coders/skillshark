@@ -35,7 +35,10 @@ function hostFlags(host) {
 
 // One `gh api gists --method POST --input <tmp.json>` call; a JSON body file
 // avoids every shell-escaping pitfall (hard rule 3).
-export async function createGist({ manifestJson, primaryDoc, tarballB64, description, ghApi, host = DEFAULT_HOST }) {
+// Encrypted shares (the default) upload ONLY a metadata-free stub + the
+// sealed envelope: no name, no description, no file list, no SKILL.md
+// preview — GitHub stores nothing readable.
+export async function createGist({ manifestJson, primaryDoc, tarballB64, description, ghApi, host = DEFAULT_HOST, encrypted = false }) {
   if (host !== DEFAULT_HOST && tarballB64.length > ENTERPRISE_INLINE_LIMIT) {
     throw new CliError(
       `That's too big for an enterprise gist share (~${Math.floor(ENTERPRISE_INLINE_LIMIT / 1024)} KB encoded cap — the API truncates larger files and enterprise receivers can't fetch around it anonymously). Put it in a repo on ${host} instead.`,
@@ -43,10 +46,10 @@ export async function createGist({ manifestJson, primaryDoc, tarballB64, descrip
     );
   }
   const files = { 'SKILLSHARK.json': { content: manifestJson } };
-  if (primaryDoc && primaryDoc.content.trim()) {
+  if (!encrypted && primaryDoc && primaryDoc.content.trim()) {
     files[path.basename(primaryDoc.name)] = { content: primaryDoc.content };
   }
-  files['package.tgz.b64'] = { content: tarballB64 };
+  files[encrypted ? 'package.tgz.enc.b64' : 'package.tgz.b64'] = { content: tarballB64 };
   const body = { public: false, description, files };
 
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'skillshark-share-'));
@@ -120,9 +123,10 @@ export async function fetchGistPackage(id, { fetch, host = DEFAULT_HOST, ghApi =
     data = await res.json();
   }
 
-  const pkgFile = data.files?.['package.tgz.b64'];
+  const encFile = data.files?.['package.tgz.enc.b64'];
+  const pkgFile = encFile ?? data.files?.['package.tgz.b64'];
   if (!pkgFile) {
-    throw new CliError('No package at that link (the gist has no package.tgz.b64 — not a SkillShark share).', 1);
+    throw new CliError('No package at that link (the gist carries no SkillShark payload).', 1);
   }
   let b64;
   if (pkgFile.truncated && host !== DEFAULT_HOST) {
@@ -146,12 +150,18 @@ export async function fetchGistPackage(id, { fetch, host = DEFAULT_HOST, ghApi =
   if (b64.length > GIST_PAYLOAD_LIMIT + 1024 * 1024) {
     throw new CliError('The package payload exceeds the gist size limit. Refusing to continue.', 1);
   }
-  const tarball = Buffer.from(b64.replace(/\s+/g, ''), 'base64');
-  if (tarball.length < 2 || tarball[0] !== 0x1f || tarball[1] !== 0x8b) {
+  const bytes = Buffer.from(b64.replace(/\s+/g, ''), 'base64');
+  const encrypted = Boolean(encFile);
+  if (encrypted) {
+    if (bytes.length < 4 || bytes.subarray(0, 4).toString() !== 'SSE1') {
+      throw new CliError(MSG.downloadIntegrity, 1);
+    }
+  } else if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
     throw new CliError(MSG.downloadIntegrity, 1);
   }
   return {
-    tarball,
+    encrypted,
+    bytes,
     owner: data.owner?.login ?? null,
     revision: data.history?.[0]?.version ?? null,
     description: data.description ?? '',

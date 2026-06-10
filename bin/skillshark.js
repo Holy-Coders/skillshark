@@ -61,22 +61,31 @@ AGENTS (share from and install to)
   opencode (commands). Cross-agent installs convert the instructions to the
   target's dialect; a skill's bundled scripts can't follow it (warned loudly).
 
-Secret gists are unlisted, NOT private — anyone with the link can read them.
-SkillShark never executes package content; install only copies files.`;
+Shares are encrypted by default: GitHub stores ciphertext, the only key rides
+in the link (#k=). Anyone with the full link can decrypt — treat the link like
+the content itself. SkillShark never executes package content; install only
+copies files.`;
 
 const COMMAND_HELP = {
-  share: `skillshark share <path|name> — package a skill and get an unlisted link
+  share: `skillshark share <path|name> — package a skill and get a private link
+
+Shares are ENCRYPTED BY DEFAULT (AES-256-GCM): GitHub stores only ciphertext
+and a metadata-free stub; the one decryption key rides in the link's #k=
+fragment, which lands on your clipboard inside the install one-liner and is
+never sent to any server. Anyone with the full link can decrypt — treat the
+link like the content itself.
 
   -e, --expires <dur>   Advisory expiry: 30m | 6h | 24h | 7d | 30d (default 7d)
       --name <name>     Override the inferred name
       --force           Include secret-shaped files the scanner would skip
-      --no-clipboard    Don't copy the link to the clipboard
+      --no-encrypt      Plaintext share: the gist page becomes a readable
+                        browser preview (SKILL.md + manifest), like a pastebin
+      --no-clipboard    Don't copy the one-liner to the clipboard
       --dry-run         Show exactly what would be packaged; upload nothing
-  -q, --quiet           Print only the URL
-      --json            Print { id, url, revision, expiresAt, fingerprint, size, files }
+  -q, --quiet           Print only the URL (key fragment included)
+      --json            Print { id, url, installCommand, encrypted, ... }
 
-Sharing needs an authenticated gh (https://cli.github.com). The link is
-unlisted, not private: anyone holding it can read the gist. Undo with
+Sharing needs an authenticated gh (https://cli.github.com). Undo with
 "skillshark revoke <name>".`,
   install: `skillshark install <source> — download, verify, preview, confirm, copy
 
@@ -130,6 +139,7 @@ const COMMAND_FLAGS = {
     name: { takesValue: true, key: 'name' },
     force: { key: 'force' },
     'no-clipboard': { key: 'noClipboard' },
+    'no-encrypt': { key: 'noEncrypt' },
     'dry-run': { key: 'dryRun' },
   },
   install: {

@@ -4,10 +4,13 @@
 
 **Share an agent skill like you'd share a file.** SkillShark packages a Claude Code skill (or command) into a secret GitHub gist and hands you an unlisted, self-verifying link; the receiver installs it with one command and zero setup — no GitHub account, no server, no registry.
 
-> ⚠️ **Secret gists are unlisted, NOT private — anyone with the link can read them.**
-> SkillShark scans for secret-shaped files (`.env`, keys, tokens) and refuses to package
-> them unless you `--force`. If you ever leak one anyway: `skillshark revoke` the share
-> *and rotate the secret* — gists keep revision history.
+> 🔐 **Shares are encrypted by default (v0.4).** GitHub stores only ciphertext and a
+> metadata-free stub — no skill name, no description, no file list. The one decryption
+> key rides in the link's `#k=` fragment, which is never sent to any server. The flip
+> side: **the link IS the content** — anyone holding the full link can decrypt, and a
+> lost link is unrecoverable (just `share` again). SkillShark still scans for
+> secret-shaped files (`.env`, keys, tokens) and refuses to package them unless you
+> `--force`; if one slips out anyway, `revoke` the share *and rotate the secret*.
 
 ## Install
 
@@ -36,14 +39,14 @@ Requirements: Node ≥ 20. **Senders** also need the [GitHub CLI](https://cli.gi
 
 ## The four commands
 
-**share** — package a skill and get an unlisted link. Your clipboard receives the full **paste-and-go install one-liner**, so the receiver just pastes it into any terminal:
+**share** — package a skill, seal it (AES-256-GCM), and get a private link. Your clipboard receives the full **paste-and-go install one-liner** — the `#k=` fragment in it is the decryption key, derived per-share from a fresh secret and salt:
 
 ```sh
 skillshark share /j
-# clipboard → npx skillshark install 'https://gist.github.com/8a1bc94…#fp=3f9a7c21'
+# clipboard → npx skillshark install 'https://gist.github.com/8a1bc94…#k=<key>&fp=3f9a7c21'
 ```
 
-(`-q` still prints the bare URL for scripts; `--json` includes both `url` and `installCommand`.)
+`--no-encrypt` opts out, which turns the gist page into a readable browser preview (SKILL.md + manifest) — useful when you *want* a pastebin. (`-q` still prints the bare URL for scripts; `--json` includes `url`, `installCommand`, and `encrypted`.)
 
 Accepts a name (`j`, `/j` — resolved across `./.claude/skills`, `./.claude/commands`, and their `~/` equivalents) or any path. Useful flags: `--expires 30m|6h|24h|7d|30d` (advisory, default 7d), `--dry-run`, `--name`, `--force`, `--no-clipboard`, `-q` (print only the URL).
 
@@ -66,7 +69,7 @@ Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md
 skillshark inspect <link> --cat SKILL.md
 ```
 
-Inspect downloads and verifies the full package, so what you read is ground truth from checksummed bytes — never sender-declared metadata. The gist page itself is also a free browser preview (`SKILLSHARK.json` + `SKILL.md`).
+Inspect downloads, decrypts, and verifies the full package, so what you read is ground truth from checksummed bytes — never sender-declared metadata. (For `--no-encrypt` shares, the gist page itself doubles as a browser preview; encrypted gists show only ciphertext, by design.)
 
 **revoke** — delete a share you created:
 
@@ -123,6 +126,7 @@ Public github.com behavior is completely unchanged: receivers still need no acco
 
 ## Security model
 
+- **Encrypted at rest by default.** AES-256-GCM over the whole package; the key is HKDF-derived from a 256-bit link secret plus a per-share salt sealed in the envelope. GitHub sees ciphertext and a stub with no name, description, or file list. The secret travels only in the URL fragment — SkillShark never sends the full link anywhere.
 - **SkillShark never executes package content.** Install = copy files. No postinstall hooks, no scripts, ever.
 - **Executable bits are stripped by default.** Executables are flagged in the preview; `--allow-exec` is required to keep them.
 - **Everything is verified.** Per-file sha256 checksums and a tree fingerprint are checked after extraction; path traversal, symlinks, absolute paths, decompression bombs, and oversized payloads all abort the install with nothing written.

@@ -53,7 +53,7 @@ async function senderDeps() {
 
 // --- paste-and-go clipboard -------------------------------------------------------
 
-test('clipboard gets the full install one-liner, not just the URL', async () => {
+test('clipboard gets the full install one-liner, not just the URL (key + fp in the fragment)', async () => {
   const deps = await senderDeps();
   deps.ghApi = async () => JSON.stringify({ id: GIST_ID, history: [{ version: 'r1' }] });
   let copied = null;
@@ -63,7 +63,10 @@ test('clipboard gets the full install one-liner, not just the URL', async () => 
   };
   const res = await runShare('demo', {}, deps);
   const fp8 = res.fingerprint.slice(0, 8);
-  assert.equal(copied, `npx skillshark install 'https://gist.github.com/${GIST_ID}#fp=${fp8}'`);
+  assert.match(
+    copied,
+    new RegExp(`^npx skillshark install 'https://gist\\.github\\.com/${GIST_ID}#k=[A-Za-z0-9_-]{43}&fp=${fp8}'$`),
+  );
   assert.equal(res.installCommand, copied);
   assert.match(deps.ui.text(), /Install one-liner copied to clipboard/);
   assert.match(deps.ui.text(), /npx skillshark install '/);
@@ -75,11 +78,12 @@ test('share --json includes installCommand; -q still prints only the URL (script
   await runShare('demo', { json: true, noClipboard: true }, deps);
   const out = JSON.parse(deps.ui.lines.at(-1));
   assert.equal(out.installCommand, `npx skillshark install '${out.url}'`);
+  assert.equal(out.encrypted, true, 'encryption is the default');
 
   const deps2 = await senderDeps();
   deps2.ghApi = async () => JSON.stringify({ id: GIST_ID, history: [{ version: 'r1' }] });
   await runShare('demo', { quiet: true, noClipboard: true }, deps2);
-  assert.match(deps2.ui.lines.at(-1), /^https:\/\/gist\.github\.com\/[0-9a-f]+#fp=[0-9a-f]{8}$/);
+  assert.match(deps2.ui.lines.at(-1), /^https:\/\/gist\.github\.com\/[0-9a-f]+#k=[A-Za-z0-9_-]{43}&fp=[0-9a-f]{8}$/);
 });
 
 // --- enterprise share ----------------------------------------------------------------
@@ -98,8 +102,8 @@ test('enterprise share: gh gets --hostname, link uses the host html_url, record 
   const res = await runShare('demo', { host: GHES, noClipboard: true }, deps);
   assert.deepEqual(args.slice(0, 2), ['--hostname', GHES]);
   const fp8 = res.fingerprint.slice(0, 8);
-  assert.equal(res.url, `https://${GHES}/gist/${GIST_ID}#fp=${fp8}`);
-  assert.equal(res.installCommand, `npx skillshark install 'https://${GHES}/gist/${GIST_ID}#fp=${fp8}'`);
+  assert.match(res.url, new RegExp(`^https://${GHES}/gist/${GIST_ID}#k=[A-Za-z0-9_-]{43}&fp=${fp8}$`));
+  assert.equal(res.installCommand, `npx skillshark install '${res.url}'`);
   const cfg = await loadConfig(deps.configDir);
   assert.equal(cfg.shares[0].host, GHES);
 });

@@ -14,6 +14,7 @@ import { fetchGistPackage } from './transports/gist.js';
 import { fetchRepoTree } from './transports/repo.js';
 import { extractTarball, hashTree, readManifest, verifyTreeAgainstManifest, MANIFEST_NAME } from './pkg.js';
 import { treeFingerprint, sha256hex, fp8, formatFp8 } from './fingerprint.js';
+import { decryptEnvelope, decodeSecret, MSG_ENCRYPTED_NEEDS_KEY } from './crypt.js';
 import { inferMetadata, findExternalRefs } from './discover.js';
 import { AGENTS, AGENT_IDS, getAgent, detectAgents, extractCanonical, rewriteFrontmatterName, NAME_RE } from './agents.js';
 import { addInstallRecord } from './config.js';
@@ -42,7 +43,14 @@ export async function fetchAndVerify(sourceStr, deps, opts = {}) {
 
   if (src.kind === 'gist') {
     const gist = await fetchGistPackage(src.id, { fetch: deps.fetch, host: src.host, ghApi: deps.ghApi });
-    await extractTarball(gist.tarball, workDir);
+    let tarball;
+    if (gist.encrypted) {
+      if (!src.key) throw new CliError(MSG_ENCRYPTED_NEEDS_KEY, 1);
+      tarball = decryptEnvelope(gist.bytes, decodeSecret(src.key));
+    } else {
+      tarball = gist.bytes;
+    }
+    await extractTarball(tarball, workDir);
     const manifest = await readManifest(workDir);
     const actual = await hashTree(workDir);
     const fingerprint = verifyTreeAgainstManifest(actual, manifest);

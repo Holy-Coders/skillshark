@@ -7,18 +7,18 @@ const ID = '8a1bc94ef23d4b6a9c01e57f8d2a4b3c';
 const GH = 'github.com';
 
 test('§8.11 source parsing: gist URLs with and without user and #fp', () => {
-  assert.deepEqual(parseSource(`https://gist.github.com/${ID}`), { kind: 'gist', id: ID, fp: null, host: GH });
-  assert.deepEqual(parseSource(`https://gist.github.com/someuser/${ID}`), { kind: 'gist', id: ID, fp: null, host: GH });
-  assert.deepEqual(parseSource(`https://gist.github.com/${ID}#fp=3f9a7c21`), { kind: 'gist', id: ID, fp: '3f9a7c21', host: GH });
-  assert.deepEqual(parseSource(`https://gist.github.com/some-user/${ID}/#fp=deadbeef`), { kind: 'gist', id: ID, fp: 'deadbeef', host: GH });
+  assert.deepEqual(parseSource(`https://gist.github.com/${ID}`), { kind: 'gist', id: ID, fp: null, key: null, host: GH });
+  assert.deepEqual(parseSource(`https://gist.github.com/someuser/${ID}`), { kind: 'gist', id: ID, fp: null, key: null, host: GH });
+  assert.deepEqual(parseSource(`https://gist.github.com/${ID}#fp=3f9a7c21`), { kind: 'gist', id: ID, fp: '3f9a7c21', key: null, host: GH });
+  assert.deepEqual(parseSource(`https://gist.github.com/some-user/${ID}/#fp=deadbeef`), { kind: 'gist', id: ID, fp: 'deadbeef', key: null, host: GH });
 });
 
 test('§8.11 source parsing: bare hex ids (20–32 chars)', () => {
-  assert.deepEqual(parseSource(ID), { kind: 'gist', id: ID, fp: null, host: GH });
+  assert.deepEqual(parseSource(ID), { kind: 'gist', id: ID, fp: null, key: null, host: GH });
   const short = 'abcdef0123456789abcd';
-  assert.deepEqual(parseSource(short), { kind: 'gist', id: short, fp: null, host: GH });
+  assert.deepEqual(parseSource(short), { kind: 'gist', id: short, fp: null, key: null, host: GH });
   // --host applies to bare ids
-  assert.deepEqual(parseSource(ID, { defaultHost: 'ghe.corp.com' }), { kind: 'gist', id: ID, fp: null, host: 'ghe.corp.com' });
+  assert.deepEqual(parseSource(ID, { defaultHost: 'ghe.corp.com' }), { kind: 'gist', id: ID, fp: null, key: null, host: 'ghe.corp.com' });
 });
 
 test('§8.11 source parsing: gh: forms, deep paths, and last-@ ref splitting', () => {
@@ -51,15 +51,15 @@ test('§8.11 source parsing: gh: forms, deep paths, and last-@ ref splitting', (
 test('enterprise gist URLs: subdomain isolation and path forms carry their host', () => {
   assert.deepEqual(
     parseSource(`https://gist.ghe.corp.com/${ID}#fp=3f9a7c21`),
-    { kind: 'gist', id: ID, fp: '3f9a7c21', host: 'ghe.corp.com' },
+    { kind: 'gist', id: ID, fp: '3f9a7c21', key: null, host: 'ghe.corp.com' },
   );
   assert.deepEqual(
     parseSource(`https://ghe.corp.com/gist/${ID}#fp=3f9a7c21`),
-    { kind: 'gist', id: ID, fp: '3f9a7c21', host: 'ghe.corp.com' },
+    { kind: 'gist', id: ID, fp: '3f9a7c21', key: null, host: 'ghe.corp.com' },
   );
   assert.deepEqual(
     parseSource(`https://ghe.corp.com/gist/someuser/${ID}`),
-    { kind: 'gist', id: ID, fp: null, host: 'ghe.corp.com' },
+    { kind: 'gist', id: ID, fp: null, key: null, host: 'ghe.corp.com' },
   );
   // tenant.ghe.com (GHE Cloud with data residency) parses the same way
   assert.equal(parseSource(`https://gist.tenant.ghe.com/${ID}`).host, 'tenant.ghe.com');

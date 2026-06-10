@@ -52,14 +52,15 @@ printf 'API_KEY=do-not-leak\n' > "$SKILL/.env"
 echo "   created $NAME (SKILL.md, scripts/hello.sh +x, .env)"
 
 # --- c. share ------------------------------------------------------------------
-step "c. share → secret gist"
+step "c. share → encrypted secret gist"
 URL="$(cd "$SENDER" && $SKILLSHARK share "$NAME" -q --no-clipboard)"
 echo "   $URL"
-URL_RE='^https://gist\.github\.com/[0-9a-f]+#fp=[0-9a-f]{8}$'
+URL_RE='^https://gist\.github\.com/[0-9a-f]+#k=[A-Za-z0-9_-]{43}&fp=[0-9a-f]{8}$'
 [[ "$URL" =~ $URL_RE ]] || die "URL shape: $URL"
 
 ID="${URL##*gist.github.com/}"; ID="${ID%%#*}"
-FP="${URL##*#fp=}"
+FP="${URL##*&fp=}"
+KEY="${URL##*#k=}"; KEY="${KEY%%&*}"
 
 # --- d. it really is secret ------------------------------------------------------
 step "d. gist is secret"
@@ -67,12 +68,18 @@ PUBLIC="$(gh api "gists/$ID" -q .public)"
 [ "$PUBLIC" = "false" ] || die "gist.public = $PUBLIC, expected false"
 echo "   public: $PUBLIC"
 
-# --- e. .env must not have been packaged ------------------------------------------
-step "e. .env excluded from the manifest"
-MANIFEST="$(gh api "gists/$ID" -q '.files["SKILLSHARK.json"].content')"
-[[ "$MANIFEST" != *'.env'* ]] || die ".env leaked into the package manifest"
-[[ "$MANIFEST" == *'"SKILL.md"'* ]] || die "manifest is missing SKILL.md"
-echo "   manifest files are clean"
+# --- e. privacy at rest: GitHub stores nothing readable ------------------------------
+step "e. gist stores only ciphertext + a metadata-free stub"
+GIST_JSON="$(gh api "gists/$ID")"
+[[ "$GIST_JSON" == *'"package.tgz.enc.b64"'* ]] || die "encrypted payload file missing"
+[[ "$GIST_JSON" != *'"package.tgz.b64"'* ]] || die "plaintext payload present in an encrypted share"
+[[ "$GIST_JSON" != *"$NAME"* ]] || die "skill name leaked into the gist"
+[[ "$GIST_JSON" != *'Acceptance-test skill'* ]] || die "skill description leaked into the gist"
+[[ "$GIST_JSON" != *'.env'* ]] || die ".env mentioned in the gist"
+STUB="$(gh api "gists/$ID" -q '.files["SKILLSHARK.json"].content')"
+[[ "$STUB" == *'"encrypted": true'* ]] || die "stub manifest missing encrypted flag"
+[[ "$STUB" != *'"files"'* ]] || die "stub manifest leaks a file list"
+echo "   ciphertext only; no name, no description, no file list"
 
 # --- f. anonymous install into a fresh project -------------------------------------
 step "f. install in a fresh receiver project"
@@ -112,7 +119,7 @@ echo "   converted to .cursor/commands, dropped files warned"
 # --- h. tampered #fp must abort with nothing written ---------------------------------
 step "h. tampered #fp aborts"
 set +e
-TAMPER_OUT="$(cd "$RECEIVER" && $SKILLSHARK install "${URL%%#*}#fp=deadbeef" --yes --dir "$TAMPER_DIR/x" 2>&1)"
+TAMPER_OUT="$(cd "$RECEIVER" && $SKILLSHARK install "${URL%%#*}#k=$KEY&fp=deadbeef" --yes --dir "$TAMPER_DIR/x" 2>&1)"
 TAMPER_CODE=$?
 set -e
 [ "$TAMPER_CODE" -eq 1 ] || die "tampered install exit code $TAMPER_CODE, expected 1"
@@ -120,6 +127,28 @@ set -e
 [ ! -e "$TAMPER_DIR/x" ] || die "tampered install left files behind"
 [ -z "$(ls -A "$TAMPER_DIR")" ] || die "tamper target dir is not empty"
 echo "   exit 1, integrity message, nothing written"
+
+# --- h2. a keyless link refuses honestly -------------------------------------------------
+step "h2. stripped #k= refuses"
+set +e
+KEYLESS_OUT="$(cd "$RECEIVER" && $SKILLSHARK install "${URL%%#*}#fp=$FP" --yes --dir "$TAMPER_DIR/y" 2>&1)"
+KEYLESS_CODE=$?
+set -e
+[ "$KEYLESS_CODE" -eq 1 ] || die "keyless install exit code $KEYLESS_CODE, expected 1"
+[[ "$KEYLESS_OUT" == *"encrypted"* ]] || die "expected the encrypted-needs-key message, got: $KEYLESS_OUT"
+[ ! -e "$TAMPER_DIR/y" ] || die "keyless install left files behind"
+echo "   exit 1, asks for the full link"
+
+# --- h3. --no-encrypt opts out: readable gist + #fp-only link ------------------------------
+step "h3. share --no-encrypt"
+PLAIN_URL="$(cd "$SENDER" && $SKILLSHARK share "$NAME" -q --no-clipboard --no-encrypt)"
+PLAIN_RE='^https://gist\.github\.com/[0-9a-f]+#fp=[0-9a-f]{8}$'
+[[ "$PLAIN_URL" =~ $PLAIN_RE ]] || die "plain URL shape: $PLAIN_URL"
+PLAIN_ID="${PLAIN_URL##*gist.github.com/}"; PLAIN_ID="${PLAIN_ID%%#*}"
+PLAIN_JSON="$(gh api "gists/$PLAIN_ID")"
+[[ "$PLAIN_JSON" == *'"SKILL.md"'* ]] || die "plain share is missing the SKILL.md browser preview"
+gh api --method DELETE "gists/$PLAIN_ID" >/dev/null
+echo "   plaintext layout intact for opt-outs (cleaned up)"
 
 # --- i. inspect --cat ------------------------------------------------------------------
 step "i. inspect --cat SKILL.md"

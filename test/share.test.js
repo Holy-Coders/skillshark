@@ -49,7 +49,7 @@ test('integration: share builds the exact gist JSON body (description format, pu
     return JSON.stringify({ id: 'feedfacefeedfacefeedfacefeedface', history: [{ version: 'deadbeefrev' }] });
   };
 
-  const res = await runShare('demo', { noClipboard: true }, deps);
+  const res = await runShare('demo', { noClipboard: true, noEncrypt: true }, deps);
 
   // the gh call shape
   assert.deepEqual(capturedArgs.slice(0, 3), ['gists', '--method', 'POST']);
@@ -152,7 +152,7 @@ test('share --force includes secret-shaped files and warns about nothing', async
     manifest = JSON.parse(body.files['SKILLSHARK.json'].content);
     return JSON.stringify({ id: 'a'.repeat(32), history: [{ version: 'r' }] });
   };
-  await runShare('leaky', { force: true, noClipboard: true }, deps);
+  await runShare('leaky', { force: true, noClipboard: true, noEncrypt: true }, deps);
   assert.ok(manifest.files.some((f) => f.path === '.env'), '--force must include .env');
 });
 

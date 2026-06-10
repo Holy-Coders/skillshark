@@ -9,7 +9,7 @@ import { CliError } from './errors.js';
 export const DEFAULT_HOST = 'github.com';
 
 const USAGE = `Unrecognized source. Accepted forms:
-  https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#fp=3f9a7c21
+  https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#k=<key>&fp=3f9a7c21
   https://ghe.example.com/gist/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#fp=3f9a7c21
   8a1bc94ef23d4b6a9c01e57f8d2a4b3c
   gh:owner/repo[/deep/path][@ref]`;
@@ -24,28 +24,47 @@ export function resolveHost(opts = {}, deps = {}) {
   return host.toLowerCase();
 }
 
+// The fragment carries the share's self-verification and, for encrypted
+// shares, its decryption key: #k=<base64url secret>&fp=<hex>. Old #fp=-only
+// links parse fine; unknown params are ignored.
+function parseFragment(fragment) {
+  const out = { fp: null, key: null };
+  if (!fragment) return out;
+  for (const part of fragment.split('&')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    const name = part.slice(0, eq);
+    const value = part.slice(eq + 1);
+    if (name === 'fp' && /^[0-9a-f]{8,64}$/.test(value)) out.fp = value;
+    else if (name === 'k' && /^[A-Za-z0-9_-]{40,48}$/.test(value)) out.key = value;
+  }
+  return out;
+}
+
 export function parseSource(input, { defaultHost = DEFAULT_HOST } = {}) {
   const s = String(input ?? '').trim();
   if (!s) throw new CliError(USAGE, 2);
 
   // gist.<host>/<id> — github.com and GHES-with-subdomain-isolation alike
   let m = s.match(
-    /^https:\/\/gist\.([a-z0-9.-]+)\/(?:([A-Za-z0-9-]+)\/)?([0-9a-f]{20,32})\/?(?:#fp=([0-9a-f]{8,64}))?$/i,
+    /^https:\/\/gist\.([a-z0-9.-]+)\/(?:([A-Za-z0-9-]+)\/)?([0-9a-f]{20,32})\/?(?:#(.*))?$/i,
   );
   if (m) {
-    return { kind: 'gist', id: m[3], fp: m[4] ?? null, host: m[1].toLowerCase() };
+    const frag = parseFragment(m[4]);
+    return { kind: 'gist', id: m[3], fp: frag.fp, key: frag.key, host: m[1].toLowerCase() };
   }
 
   // <host>/gist/<id> — GHES path form
   m = s.match(
-    /^https:\/\/([a-z0-9.-]+)\/gist\/(?:([A-Za-z0-9-]+)\/)?([0-9a-f]{20,32})\/?(?:#fp=([0-9a-f]{8,64}))?$/i,
+    /^https:\/\/([a-z0-9.-]+)\/gist\/(?:([A-Za-z0-9-]+)\/)?([0-9a-f]{20,32})\/?(?:#(.*))?$/i,
   );
   if (m && m[1].toLowerCase() !== 'github.com') {
-    return { kind: 'gist', id: m[3], fp: m[4] ?? null, host: m[1].toLowerCase() };
+    const frag = parseFragment(m[4]);
+    return { kind: 'gist', id: m[3], fp: frag.fp, key: frag.key, host: m[1].toLowerCase() };
   }
 
   if (/^[0-9a-f]{20,32}$/.test(s)) {
-    return { kind: 'gist', id: s, fp: null, host: defaultHost };
+    return { kind: 'gist', id: s, fp: null, key: null, host: defaultHost };
   }
 
   if (s.startsWith('gh:')) {

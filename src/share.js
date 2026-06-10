@@ -7,6 +7,8 @@ import { resolveHost, DEFAULT_HOST } from './source.js';
 import { resolveShareArg, collectFiles, inferMetadata, findExternalRefs } from './discover.js';
 import { buildTarball } from './pkg.js';
 import { treeFingerprint, fp8 } from './fingerprint.js';
+import { generateLinkSecret, encodeSecret, encryptTarball } from './crypt.js';
+import { VERSION as TOOL_VERSION } from './version.js';
 import { createGist, deleteGist, gistDescription, GIST_PAYLOAD_LIMIT } from './transports/gist.js';
 import { addShareRecord, findShareRecord, removeShareRecord } from './config.js';
 import { humanSize, displayPath, plural } from './ui.js';
@@ -115,7 +117,13 @@ export async function runShare(arg, opts, deps) {
     }
   }
 
-  const b64 = tarball.toString('base64');
+  // privacy by default: seal the tarball; GitHub stores only ciphertext and
+  // the one key rides in the link fragment (--no-encrypt opts out for the
+  // browser-preview behavior)
+  const encrypted = !opts.noEncrypt;
+  const linkSecret = encrypted ? generateLinkSecret() : null;
+  const payload = encrypted ? encryptTarball(tarball, linkSecret) : tarball;
+  const b64 = payload.toString('base64');
   if (b64.length > GIST_PAYLOAD_LIMIT) {
     throw new CliError(
       `That's ${humanSize(b64.length)} (gist limit ~5 MB). Put it in a repo and share gh:owner/repo/path instead.`,
@@ -147,27 +155,45 @@ export async function runShare(arg, opts, deps) {
   }
 
   let primaryDoc = null;
-  if (built.meta.primaryDoc) {
+  if (!encrypted && built.meta.primaryDoc) {
     const abs = match.isDir ? path.join(match.root, ...built.meta.primaryDoc.split('/')) : match.root;
     try {
       primaryDoc = { name: built.meta.primaryDoc, content: await readFile(abs, 'utf8') };
     } catch { /* preview is optional */ }
   }
 
+  // encrypted shares publish a metadata-free stub: no name, no description,
+  // no file list — only what's needed to recognize and house-keep the share
+  const publicManifestJson = encrypted
+    ? JSON.stringify({
+        skillshark: '3',
+        encrypted: true,
+        fp8: shortFp,
+        createdAt: manifest.createdAt,
+        expiresAt: manifest.expiresAt,
+        tool: { name: 'skillshark', version: TOOL_VERSION },
+      }, null, 2) + '\n'
+    : manifestJson;
+  const description = encrypted
+    ? `skillshark: encrypted (fp ${shortFp})`
+    : gistDescription({ name: manifest.name, agent: manifest.agent, type: manifest.type, fp8: shortFp });
+
   const host = resolveHost(opts, deps);
   const { id, revision, htmlUrl } = await ui.spin('Uploading as a secret gist', () =>
     createGist({
-      manifestJson,
+      manifestJson: publicManifestJson,
       primaryDoc,
       tarballB64: b64,
-      description: gistDescription({ name: manifest.name, agent: manifest.agent, type: manifest.type, fp8: shortFp }),
+      description,
       ghApi: deps.ghApi,
       host,
+      encrypted,
     }));
   // github.com gets the short canonical form; enterprise hosts keep the
   // html_url GitHub handed back (subdomain isolation varies per install)
   const base = host === DEFAULT_HOST ? `https://gist.github.com/${id}` : (htmlUrl ?? `https://${host}/gist/${id}`);
-  const url = `${base}#fp=${shortFp}`;
+  const fragment = encrypted ? `#k=${encodeSecret(linkSecret)}&fp=${shortFp}` : `#fp=${shortFp}`;
+  const url = `${base}${fragment}`;
   // the paste-and-go line: receivers run this with zero setup
   const installCommand = `npx skillshark install '${url}'`;
 
@@ -190,6 +216,7 @@ export async function runShare(arg, opts, deps) {
       id,
       url,
       installCommand,
+      encrypted,
       revision,
       expiresAt: manifest.expiresAt,
       fingerprint,
@@ -201,7 +228,12 @@ export async function runShare(arg, opts, deps) {
     ui.out(url);
   } else {
     ui.out('');
-    ui.ok('Uploaded as a secret gist (unlisted — anyone with the link can read it)');
+    if (encrypted) {
+      ui.ok('Encrypted (AES-256-GCM) and uploaded as a secret gist — GitHub stores only ciphertext');
+      ui.out('    The only key rides in your link below. Lose the link, lose the share.');
+    } else {
+      ui.ok('Uploaded as a secret gist (unlisted and UNENCRYPTED — anyone with the link can read it)');
+    }
     if (copied) ui.ok(`Install one-liner copied to clipboard — they just paste it · advisory expiry in ${expires.label}`);
     else ui.out(`  Advisory expiry in ${expires.label}`);
     ui.out('');
@@ -211,7 +243,7 @@ export async function runShare(arg, opts, deps) {
     ui.out(`  Link only:  ${url}   ${who}`);
     ui.out(`  Undo:       skillshark revoke ${manifest.name}   (deletes the gist)`);
   }
-  return { status: 'shared', id, url, installCommand, fingerprint };
+  return { status: 'shared', id, url, installCommand, fingerprint, encrypted };
 }
 
 // --- revoke (§4.4) -----------------------------------------------------------
