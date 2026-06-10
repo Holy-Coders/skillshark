@@ -374,7 +374,7 @@
   <section>
     <span class="depth">1 000 m · midnight zone</span>
     <p class="kicker">the surface area</p>
-    <h2>Five commands. That's the tool.</h2>
+    <h2>Six commands. That's the tool.</h2>
     <div class="cmds">
       <div class="cmd reveal">
         <h3><span class="verb">share</span> &lt;path|name&gt;</h3>
@@ -406,10 +406,18 @@ $ skillshark shares j   <span class="c-dim"># copies the install one-liner again
         <pre>$ skillshark revoke j
 <span class="c-dim"># → "This share was deleted by the sender."</span></pre>
       </div>
+      <div class="cmd reveal">
+        <h3><span class="verb">prune</span></h3>
+        <p>Deletes your own shares that are past their advisory expiry — the real cleanup behind the advisory date. A nightly Action makes it self-hosted cron.</p>
+        <pre>$ skillshark prune   <span class="c-dim"># confirms, then deletes the expired ones</span></pre>
+      </div>
     </div>
     <p class="grid-note reveal">Prefer menus? Run bare <code>skillshark</code> for an interactive session: a picker over
     every skill on your machine, paste-a-link installs with a keep-or-rename prompt, share recall, guided revokes, spinners on the slow parts.
     Bare <code>skillshark share</code> / <code>install</code> / <code>inspect</code> / <code>revoke</code> jump straight to that command's wizard.</p>
+    <p class="grid-note reveal" style="margin-top:14px">SkillShark dogfoods itself — there's a Claude Code skill that drives the CLI for you,
+    installed (of course) with <code>npx skillshark install '&lt;link&gt;'</code>. Inside Claude Code,
+    "can you send me that skill?" just works.</p>
   </section>
 
   <!-- ================= CROSSING AGENTS · 2500m ================= -->

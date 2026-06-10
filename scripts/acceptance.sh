@@ -14,14 +14,15 @@ RECEIVER="$(mktemp -d)"
 TAMPER_DIR="$(mktemp -d)"
 HW_PARENT="$(mktemp -d)"
 ID=""
+PRUNE_ID=""
 
 step() { printf '\n== %s\n' "$*"; }
 die() { printf 'ACCEPTANCE FAILED: %s\n' "$*" >&2; exit 1; }
 
 cleanup() {
-  if [ -n "$ID" ]; then
-    gh api --method DELETE "gists/$ID" >/dev/null 2>&1 || true
-  fi
+  for g in "$ID" "$PRUNE_ID"; do
+    [ -n "$g" ] && gh api --method DELETE "gists/$g" >/dev/null 2>&1 || true
+  done
   rm -rf "$CFG" "$SENDER" "$RECEIVER" "$TAMPER_DIR" "$HW_PARENT"
 }
 trap cleanup EXIT
@@ -172,6 +173,19 @@ $SKILLSHARK install gh:octocat/Hello-World@7fd1a60b01f91b314f59955a4e4d4e80d8edf
   --dir "$HW_PARENT/hw" --yes >/dev/null
 [ -f "$HW_PARENT/hw/README" ] || die "README missing after repo install"
 echo "   README installed from codeload"
+
+# --- j2. prune deletes an advisory-expired share -------------------------------------------
+step "j2. prune"
+# make a throwaway share, force its cached expiry into the past, prune it
+PRUNE_URL="$(cd "$SENDER" && $SKILLSHARK share "$NAME" -q --no-clipboard --expires 30m)"
+PRUNE_ID="${PRUNE_URL##*gist.github.com/}"; PRUNE_ID="${PRUNE_ID%%#*}"
+CFG="$CFG" PRUNE_ID="$PRUNE_ID" node -e 'const fs=require("fs"),p=process.env.CFG+"/config.json",c=JSON.parse(fs.readFileSync(p));c.shares=c.shares.map(s=>s.id===process.env.PRUNE_ID?{...s,expiresAt:new Date(Date.now()-9e8).toISOString()}:s);fs.writeFileSync(p,JSON.stringify(c))'
+PRUNE_OUT="$($SKILLSHARK prune -y)"
+[[ "$PRUNE_OUT" == *"Pruned"* ]] || die "prune did not report a deletion: $PRUNE_OUT"
+if gh api "gists/$PRUNE_ID" >/dev/null 2>&1; then die "expired gist still exists after prune"; fi
+# the still-fresh main share must survive
+gh api "gists/$ID" >/dev/null 2>&1 || die "prune wrongly deleted the unexpired share"
+echo "   expired share gone; fresh share untouched"
 
 # --- k. revoke ----------------------------------------------------------------------------
 step "k. revoke"

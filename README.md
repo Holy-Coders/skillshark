@@ -88,6 +88,24 @@ The gist dies immediately; anyone holding the link gets "deleted by the sender."
 (GitHub's anonymous API cache can serve a just-deleted gist for up to ~a minute
 before the 404 propagates everywhere.)
 
+**prune** — delete your own shares that are past their advisory expiry:
+
+```sh
+skillshark prune           # lists the expired ones, confirms, deletes them
+```
+
+Advisory expiry is the date installers refuse after — the bytes persist on GitHub until you prune or revoke. (A nightly GitHub Action running `skillshark prune --yes` makes this self-hosted cron, zero servers of your own.)
+
+## SkillShark, as a skill
+
+SkillShark dogfoods itself: there's a Claude Code skill that teaches Claude to drive the CLI for you, so inside Claude Code "can you send me that skill?" just works. Install it with the tool it's about:
+
+```sh
+npx skillshark install 'https://gist.github.com/729643d5e68589d34f59bedec8743a72#fp=ecdecf80'
+```
+
+Then ask Claude to share, install, recall, or convert a skill in plain English.
+
 ## Cross-agent sharing (v0.2)
 
 SkillShark speaks seven tools' on-disk dialects. You can **share from** any of them (bare names resolve across all of these locations) and **install to** any of them with `--agent <id>`:

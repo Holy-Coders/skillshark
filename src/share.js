@@ -331,6 +331,92 @@ export async function runShares(arg, opts, deps) {
   return { status: 'shown', id: rec.id, url: rec.url, installCommand };
 }
 
+// --- prune: delete your own advisory-expired shares ----------------------------
+
+// Resolve a candidate gist's advisory expiry: prefer the local cache (no
+// network), else read expiresAt out of the SKILLSHARK.json stub.
+async function resolveExpiry(gist, cacheById, host, deps) {
+  const rec = cacheById.get(gist.id);
+  if (rec && rec.expiresAt !== undefined) return rec.expiresAt;
+  let full;
+  try {
+    full = JSON.parse(await deps.ghApi([...(host !== DEFAULT_HOST ? ['--hostname', host] : []), `gists/${gist.id}`]));
+  } catch {
+    return null; // unreadable → leave it alone
+  }
+  const stub = full.files?.['SKILLSHARK.json']?.content;
+  if (!stub) return null;
+  try {
+    return JSON.parse(stub).expiresAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// `skillshark prune` — list your skillshark gists, keep only those past their
+// advisory expiry, confirm, delete. Advisory expiry the installer already
+// refuses; prune is the real cleanup the sender controls.
+export async function runPrune(opts, deps) {
+  const ui = deps.ui;
+  const host = resolveHost(opts, deps);
+  const cfg = await loadConfig(deps.configDir);
+  const cacheById = new Map(cfg.shares.map((s) => [s.id, s]));
+
+  const out = await ui.spin('Listing your shares', () =>
+    deps.ghApi([...(host !== DEFAULT_HOST ? ['--hostname', host] : []), 'gists', '--paginate']));
+  let gists;
+  try {
+    gists = JSON.parse(out);
+  } catch {
+    throw new CliError('Unexpected response from gh while listing gists.', 1);
+  }
+  const candidates = gists.filter((g) => String(g.description ?? '').startsWith('skillshark:'));
+  const now = Date.now();
+  const expired = [];
+  for (const g of candidates) {
+    const expiresAt = await resolveExpiry(g, cacheById, host, deps);
+    if (!expiresAt) continue;
+    const t = Date.parse(expiresAt);
+    if (!Number.isNaN(t) && t < now) {
+      const rec = cacheById.get(g.id);
+      expired.push({ id: g.id, expiresAt, name: rec?.name ?? null, description: g.description });
+    }
+  }
+
+  if (opts.json) {
+    ui.out(JSON.stringify({ scanned: candidates.length, expired: expired.map((e) => ({ id: e.id, name: e.name, expiresAt: e.expiresAt })) }, null, 2));
+  }
+  if (expired.length === 0) {
+    if (!opts.json) ui.out(`  Nothing to prune — none of your ${plural(candidates.length, 'share')} are past their advisory expiry.`);
+    return { status: 'pruned', deleted: 0, scanned: candidates.length };
+  }
+
+  if (!opts.json) {
+    ui.out(`  ${plural(expired.length, 'share')} past advisory expiry:`);
+    for (const e of expired) {
+      const days = Math.max(1, Math.floor((now - Date.parse(e.expiresAt)) / 86400000));
+      ui.out(`    ${e.name ? e.name : e.id.slice(0, 12)}   expired ${plural(days, 'day')} ago`);
+    }
+    ui.out('');
+  }
+  if (deps.isTTY && !opts.yes) {
+    const go = await deps.prompts.confirm({ message: `Delete ${plural(expired.length, 'expired gist')}? This is permanent.` });
+    if (go !== true) {
+      ui.out('  Cancelled. Nothing was deleted.');
+      return { status: 'cancelled' };
+    }
+  }
+  let deleted = 0;
+  for (const e of expired) {
+    await deleteGist(e.id, { ghApi: deps.ghApi, host });
+    await removeShareRecord(deps.configDir, e.id);
+    deleted += 1;
+  }
+  if (opts.json) ui.out(JSON.stringify({ deleted }));
+  else ui.ok(`Pruned ${plural(deleted, 'expired share')}.`);
+  return { status: 'pruned', deleted, scanned: candidates.length };
+}
+
 // --- revoke (§4.4) -----------------------------------------------------------
 
 export async function runRevoke(idOrName, opts, deps) {

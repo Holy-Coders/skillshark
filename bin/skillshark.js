@@ -8,7 +8,7 @@ import { getConfigDir } from '../src/config.js';
 import { makeUi, realPrompts, attachSpinner } from '../src/ui.js';
 import { makeGhApi } from '../src/gh.js';
 import { copyToClipboard } from '../src/clipboard.js';
-import { runShare, runRevoke, runShares } from '../src/share.js';
+import { runShare, runRevoke, runShares, runPrune } from '../src/share.js';
 import { runInstall, runInspect } from '../src/install.js';
 import { runInteractive } from '../src/interactive.js';
 
@@ -24,6 +24,7 @@ COMMANDS
   inspect  <source>      Preview a shared skill without installing anything
   shares   [name|id]     Recall links you've shared — re-copies the one-liner
   revoke   <id|name>     Delete a share you created (deletes the gist)
+  prune                  Delete your own shares that are past advisory expiry
 
 SOURCES (install / inspect)
   https://gist.github.com/<id>#fp=<hex>    a SkillShark link
@@ -134,6 +135,16 @@ Deletes the underlying gist via your gh auth. The link dies immediately.`,
 
 Links (keys included) live in your local config (chmod 600), so only the
 machine that created a share can recall it. Lost everywhere? Just share again.`,
+  prune: `skillshark prune — delete your own advisory-expired shares
+
+Lists your skillshark gists, keeps only those past their advisory expiry
+(read from your local cache, or the gist's own metadata), confirms, and
+deletes them. Advisory expiry is the date installers refuse after; the bytes
+persist on GitHub until you prune or revoke — this is that cleanup.
+
+  -y, --yes             Skip the confirmation prompt
+      --host <h>        Prune on a GitHub Enterprise host
+      --json            Print { scanned, expired } then { deleted }`,
 };
 
 // flag spec: long name → { short, takesValue, key }
@@ -172,6 +183,7 @@ const COMMAND_FLAGS = {
   shares: {
     'no-clipboard': { key: 'noClipboard' },
   },
+  prune: {},
 };
 
 function parseArgv(argv) {
@@ -246,9 +258,9 @@ async function main() {
     return 0;
   }
 
-  const known = new Set(['share', 'install', 'inspect', 'revoke', 'shares', 'interactive']);
+  const known = new Set(['share', 'install', 'inspect', 'revoke', 'shares', 'prune', 'interactive']);
   if (!known.has(parsed.command)) {
-    throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, shares, revoke. Try: skillshark --help`, 2);
+    throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, shares, revoke, prune. Try: skillshark --help`, 2);
   }
   if (parsed.positionals.length > 1) {
     throw new CliError(`Too many arguments: ${parsed.positionals.slice(1).join(' ')}`, 2);
@@ -280,7 +292,7 @@ async function main() {
   }
 
   const arg = parsed.positionals[0];
-  if (!arg && parsed.command !== 'shares') {
+  if (!arg && parsed.command !== 'shares' && parsed.command !== 'prune') {
     // bare subcommand in a TTY → that command's wizard; piped → usage error
     if (effectiveTTY) return runInteractive(deps, parsed.command);
     const noun = parsed.command === 'share' ? '<path|name>' : parsed.command === 'revoke' ? '<id|name>' : '<source>';
@@ -302,6 +314,9 @@ async function main() {
       return 0;
     case 'shares':
       await runShares(arg ?? null, parsed.opts, deps);
+      return 0;
+    case 'prune':
+      await runPrune(parsed.opts, deps);
       return 0;
     default:
       return 2;
