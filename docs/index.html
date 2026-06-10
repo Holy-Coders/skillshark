@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkillShark — share agent skills like files</title>
+<meta name="description" content="SkillShark packages a Claude Code skill into a secret GitHub gist and hands you an unlisted, self-verifying link. One command out, one command in. No server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;500;700;800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --abyss:    #03060a;
+    --deep:     #071019;
+    --water:    #0b1722;
+    --pane:     #0d1b27;
+    --pane-edge:#15303f;
+    --foam:     #d7e7ea;
+    --dim:      #5d7884;
+    --faint:    #324a56;
+    --glow:     #3fe0c5;
+    --glow-soft:rgba(63,224,197,.14);
+    --amber:    #ffb454;
+    --green:    #7ee787;
+    --red:      #ff7575;
+    --url:      #7fd4ff;
+    --mono-body:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --mono-disp:"Martian Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--foam);
+    font-family: var(--mono-body);
+    font-size: 15px;
+    line-height: 1.65;
+    background:
+      radial-gradient(1200px 600px at 70% -10%, rgba(63,224,197,.07), transparent 60%),
+      linear-gradient(180deg, #0d1d2b 0%, var(--water) 18%, var(--deep) 55%, var(--abyss) 100%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
+
+  /* ---- atmosphere: scanlines + grain + drifting motes ---- */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 3px);
+    mix-blend-mode: overlay;
+  }
+  .motes { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .mote {
+    position: absolute; border-radius: 50%;
+    background: var(--glow); opacity: .25; filter: blur(1px);
+    animation: drift var(--dur,14s) ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    from { transform: translate3d(0,0,0) scale(1); opacity:.12; }
+    to   { transform: translate3d(var(--dx,40px), var(--dy,-60px), 0) scale(1.4); opacity:.4; }
+  }
+
+  ::selection { background: var(--glow); color: var(--abyss); }
+  a { color: var(--url); text-decoration-color: var(--faint); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--url); }
+
+  .wrap { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- depth markers ---- */
+  .depth {
+    position: absolute; right: -86px; top: 0;
+    color: var(--faint); font-size: 11px; letter-spacing: .12em;
+    writing-mode: vertical-rl; user-select: none;
+  }
+  .depth::before { content: "— "; }
+  @media (max-width: 1220px) { .depth { display: none; } }
+
+  /* ---- hero ---- */
+  header { padding: 88px 0 24px; position: relative; }
+  .waterline {
+    color: var(--faint); font-size: 13px; line-height: 1.2;
+    white-space: pre; overflow: hidden; position: relative; height: 3.4em;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  }
+  .fin {
+    position: absolute; bottom: 1.15em; left: 0;
+    color: var(--glow); text-shadow: 0 0 12px var(--glow-soft);
+    animation: swim 17s linear infinite;
+    white-space: pre;
+  }
+  @keyframes swim {
+    0%   { transform: translateX(-12ch) scaleX(1); }
+    49%  { transform: translateX(calc(100vw + 4ch)) scaleX(1); }
+    50%  { transform: translateX(calc(100vw + 4ch)) scaleX(-1); }
+    99%  { transform: translateX(-12ch) scaleX(-1); }
+    100% { transform: translateX(-12ch) scaleX(1); }
+  }
+  .tildes { animation: bob 5s ease-in-out infinite alternate; display: inline-block; }
+  @keyframes bob { from { transform: translateY(0); } to { transform: translateY(3px); } }
+
+  h1 {
+    font-family: var(--mono-disp);
+    font-weight: 800;
+    font-size: clamp(34px, 7vw, 72px);
+    letter-spacing: -0.02em;
+    margin: 18px 0 6px;
+    line-height: 1.02;
+  }
+  h1 .shark-k { color: var(--glow); text-shadow: 0 0 24px var(--glow-soft); }
+  .tagline {
+    font-size: clamp(15px, 2.4vw, 19px);
+    color: var(--foam);
+    max-width: 56ch;
+  }
+  .tagline b { color: var(--glow); font-weight: 600; }
+  .subline { color: var(--dim); max-width: 64ch; margin-top: 10px; font-size: 14px; }
+
+  .npx {
+    display: flex; align-items: center; gap: 0;
+    margin: 30px 0 8px; max-width: 560px;
+    border: 1px solid var(--pane-edge); border-radius: 8px;
+    background: linear-gradient(180deg, var(--pane), #0a1620);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 18px 50px -18px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04);
+    overflow: hidden;
+  }
+  .npx code { padding: 14px 18px; font-size: 14px; flex: 1; white-space: nowrap; overflow-x: auto; }
+  .npx code .p { color: var(--dim); }
+  .npx button {
+    font: 600 12px var(--mono-body); letter-spacing: .06em;
+    color: var(--abyss); background: var(--glow);
+    border: 0; padding: 14px 18px; cursor: pointer; flex-shrink: 0;
+    transition: filter .15s ease, transform .05s ease;
+  }
+  .npx button:hover { filter: brightness(1.12); }
+  .npx button:active { transform: scale(.97); }
+  .meta-links { color: var(--faint); font-size: 13px; }
+  .meta-links a { color: var(--dim); }
+
+  /* ---- section scaffolding ---- */
+  section { padding: 72px 0 8px; position: relative; }
+  .kicker {
+    color: var(--dim); font-size: 13px; letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .kicker::before { content: "## "; color: var(--faint); }
+  h2 {
+    font-family: var(--mono-disp); font-weight: 700;
+    font-size: clamp(22px, 3.6vw, 32px);
+    margin: 0 0 18px; letter-spacing: -0.01em;
+  }
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---- terminals ---- */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 880px) { .duo { grid-template-columns: 1fr; } }
+  .term {
+    border: 1px solid var(--pane-edge); border-radius: 10px;
+    background: linear-gradient(180deg, #0e1d2a 0%, var(--pane) 100%);
+    box-shadow: 0 24px 60px -24px rgba(0,0,0,.85), 0 0 40px -22px var(--glow-soft), inset 0 1px 0 rgba(255,255,255,.05);
+    overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--pane-edge);
+    background: rgba(255,255,255,.025);
+    color: var(--dim); font-size: 12px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); opacity: .8; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .term-bar .title { margin-left: 8px; letter-spacing: .04em; }
+  .term pre {
+    margin: 0; padding: 18px 18px 22px; font-size: 12.5px; line-height: 1.62;
+    overflow-x: auto; min-height: 21em;
+    font-family: var(--mono-body);
+  }
+  .c-prompt { color: var(--glow); }
+  .c-cmd    { color: var(--foam); font-weight: 500; }
+  .c-dim    { color: var(--dim); }
+  .c-ok     { color: var(--green); }
+  .c-warn   { color: var(--amber); }
+  .c-url    { color: var(--url); }
+  .c-tree   { color: var(--faint); }
+  .cursor {
+    display: inline-block; width: .62em; height: 1.15em;
+    background: var(--glow); vertical-align: text-bottom;
+    animation: blink 1.06s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .handoff-arrow {
+    grid-column: 1 / -1; text-align: center; color: var(--faint);
+    font-size: 13px; letter-spacing: .2em; margin: -6px 0;
+    user-select: none;
+  }
+
+  /* ---- steps ---- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 820px) { .steps { grid-template-columns: 1fr; } }
+  .step {
+    border: 1px solid var(--pane-edge); border-radius: 10px; padding: 20px;
+    background: rgba(13,27,39,.6);
+    transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  }
+  .step:hover { border-color: var(--glow); transform: translateY(-3px); box-shadow: 0 14px 40px -20px var(--glow-soft); }
+  .step .n { color: var(--glow); font-size: 12px; letter-spacing: .1em; }
+  .step h3 { margin: 8px 0 8px; font-family: var(--mono-disp); font-weight: 700; font-size: 16px; }
+  .step p { color: var(--dim); font-size: 13.5px; margin: 0; }
+  .step code { color: var(--foam); background: rgba(255,255,255,.05); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  /* ---- commands ---- */
+  .cmds { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 820px) { .cmds { grid-template-columns: 1fr; } }
+  .cmd {
+    border: 1px solid var(--pane-edge); border-left: 3px solid var(--glow);
+    border-radius: 8px; padding: 18px 20px; background: rgba(13,27,39,.55);
+  }
+  .cmd h3 { margin: 0 0 4px; font-size: 15px; font-family: var(--mono-disp); font-weight: 700; }
+  .cmd h3 .verb { color: var(--glow); }
+  .cmd p { color: var(--dim); margin: 6px 0 10px; font-size: 13.5px; }
+  .cmd pre {
+    margin: 0; padding: 10px 12px; border-radius: 6px; overflow-x: auto;
+    background: rgba(3,6,10,.6); border: 1px solid rgba(255,255,255,.05);
+    color: var(--foam); font-size: 12.5px;
+  }
+  .cmd pre .c-dim { color: var(--faint); }
+
+  /* ---- security ---- */
+  .sec-list { list-style: none; margin: 0; padding: 0; max-width: 76ch; }
+  .sec-list li {
+    padding: 10px 0 10px 34px; position: relative;
+    border-bottom: 1px dashed rgba(255,255,255,.06);
+    color: var(--dim); font-size: 14px;
+  }
+  .sec-list li b { color: var(--foam); font-weight: 600; }
+  .sec-list li::before {
+    content: "✓"; position: absolute; left: 6px; color: var(--green);
+    text-shadow: 0 0 10px rgba(126,231,135,.35);
+  }
+  .warnbox {
+    margin-top: 26px; max-width: 76ch;
+    border: 1px solid rgba(255,180,84,.4); border-left: 4px solid var(--amber);
+    border-radius: 8px; padding: 16px 20px;
+    background: rgba(255,180,84,.05);
+    color: var(--dim); font-size: 14px;
+  }
+  .warnbox b { color: var(--amber); }
+
+  /* ---- the deep / footer ---- */
+  footer { padding: 110px 0 70px; position: relative; text-align: center; }
+  .shark-art {
+    color: var(--faint); font-size: clamp(6px, 1.35vw, 13px); line-height: 1.25;
+    white-space: pre; display: inline-block; text-align: left;
+    text-shadow: 0 0 18px rgba(63,224,197,.1);
+    animation: lurk 9s ease-in-out infinite alternate;
+    user-select: none;
+  }
+  .shark-art .eye { color: var(--glow); text-shadow: 0 0 10px var(--glow); }
+  @keyframes lurk { from { transform: translateY(0) } to { transform: translateY(10px) } }
+  .abyss-line { color: var(--faint); font-size: 12px; letter-spacing: .25em; margin-top: 34px; }
+  .foot-links { margin-top: 18px; color: var(--dim); font-size: 13px; }
+  .foot-links a { margin: 0 10px; }
+  .no-server {
+    margin-top: 26px; color: var(--faint); font-size: 12px; letter-spacing: .08em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+    .cursor { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="motes" aria-hidden="true" id="motes"></div>
+
+<div class="wrap">
+
+  <!-- ================= HERO · 0m ================= -->
+  <header>
+    <span class="depth" style="top:90px">0 m · surface</span>
+    <div class="waterline" aria-hidden="true"><span class="fin" id="fin">    /|
+   / |
+  /  |
+ /___|</span>
+<span class="tildes">~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~</span></div>
+
+    <h1>SKILL<span class="shark-k">SHARK</span></h1>
+    <p class="tagline">Share an agent skill like you'd share a <b>file</b>. One command out, one command in — unlisted, revocable, self-verifying links.</p>
+    <p class="subline">No server. No registry. No new accounts. The GitHub you already have is the infrastructure: skills travel as secret gists, receivers need nothing but Node.</p>
+
+    <div class="npx">
+      <code id="npx-cmd"><span class="p">$</span> npx skillshark install &lt;link&gt;</code>
+      <button id="copy-btn" type="button" aria-label="Copy npx command">COPY</button>
+    </div>
+    <p class="meta-links">v0.1.0 · <a href="https://www.npmjs.com/package/skillshark">npm</a> · MIT · works with Claude Code skills &amp; commands</p>
+  </header>
+
+  <!-- ================= THE HANDOFF · 200m ================= -->
+  <section id="handoff">
+    <span class="depth">200 m · twilight zone</span>
+    <p class="kicker">the handoff</p>
+    <h2>Watch a skill change hands</h2>
+    <div class="duo">
+      <div class="term reveal">
+        <div class="term-bar" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">sender — ~/project</span></div>
+        <pre id="t-send" aria-label="Terminal transcript: skillshark share"></pre>
+      </div>
+      <div class="term reveal">
+        <div class="term-bar" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">receiver — anywhere</span></div>
+        <pre id="t-recv" aria-label="Terminal transcript: skillshark install"></pre>
+      </div>
+      <div class="handoff-arrow" aria-hidden="true">· · · paste the link in chat · · ·</div>
+    </div>
+  </section>
+
+  <!-- ================= HOW IT WORKS ================= -->
+  <section>
+    <p class="kicker">how it works</p>
+    <h2>Three moves, zero ceremony</h2>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="n">[1/3] PACK</div>
+        <h3>share</h3>
+        <p><code>skillshark share /j</code> finds the skill in <code>.claude/skills</code>, infers the manifest (you never write one), scrubs <code>.env</code> and key-shaped files, and uploads a tarball as a <em>secret gist</em>. The link lands on your clipboard.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">[2/3] PASTE</div>
+        <h3>the link</h3>
+        <p>It's a plain gist URL with a fingerprint riding the fragment: <code>#fp=3f9a7c21</code>. Unlisted, attributable to your GitHub identity, revocable at any moment. The gist page doubles as a free browser preview.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">[3/3] INSTALL</div>
+        <h3>install</h3>
+        <p><code>npx skillshark install &lt;link&gt;</code> fetches anonymously, verifies every byte, shows a preview, asks consent, and copies files into the right <code>.claude/</code> path. Works from any public repo too: <code>gh:owner/repo/path@ref</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= COMMANDS · 1000m ================= -->
+  <section>
+    <span class="depth">1 000 m · midnight zone</span>
+    <p class="kicker">the surface area</p>
+    <h2>Four commands. That's the tool.</h2>
+    <div class="cmds">
+      <div class="cmd reveal">
+        <h3><span class="verb">share</span> &lt;path|name&gt;</h3>
+        <p>Package → secret gist → link on clipboard. Advisory expiry, dry-runs, secret scanner.</p>
+        <pre>$ skillshark share /j --expires 24h
+$ skillshark share ./prompts --dry-run</pre>
+      </div>
+      <div class="cmd reveal">
+        <h3><span class="verb">install</span> &lt;source&gt;</h3>
+        <p>Verify, preview, confirm, copy. Never executes anything. Gist links, bare ids, or repo paths.</p>
+        <pre>$ skillshark install &lt;gist-url|id&gt;
+$ skillshark install gh:acme/skills/review@main</pre>
+      </div>
+      <div class="cmd reveal">
+        <h3><span class="verb">inspect</span> &lt;source&gt;</h3>
+        <p>Look before you leap — full download + verification, zero writes. Read any packaged file.</p>
+        <pre>$ skillshark inspect &lt;link&gt; --cat SKILL.md</pre>
+      </div>
+      <div class="cmd reveal">
+        <h3><span class="verb">revoke</span> &lt;id|name&gt;</h3>
+        <p>Deletes the gist via your gh auth. The link dies; installers get an honest message.</p>
+        <pre>$ skillshark revoke j
+<span class="c-dim"># → "This share was deleted by the sender."</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECURITY · 4000m ================= -->
+  <section>
+    <span class="depth">4 000 m · abyssopelagic</span>
+    <p class="kicker">trust model</p>
+    <h2>Paranoid by construction</h2>
+    <ul class="sec-list">
+      <li><b>Never executes package content.</b> Install = copy files. No postinstall hooks, no scripts, ever.</li>
+      <li><b>Executable bits stripped by default.</b> Flagged in the preview; <b>--allow-exec</b> is an explicit opt-in.</li>
+      <li><b>Every byte verified.</b> Per-file sha256 + a tree fingerprint, checked after guarded extraction — path traversal, symlinks, absolute paths, decompression bombs all abort with nothing written.</li>
+      <li><b>Self-verifying links.</b> The <b>#fp=</b> fragment is recomputed from downloaded bytes — if the gist was edited after sharing, the install hard-fails.</li>
+      <li><b>Receivers need no GitHub account.</b> The receive path is anonymous HTTPS only, and provably never shells out (enforced by tests).</li>
+    </ul>
+    <div class="warnbox">
+      <b>⚠ secret ≠ private.</b> A secret gist is unlisted, not encrypted — anyone holding the URL can read it,
+      and a skill is <em>instructions an AI will obey</em>. SkillShark makes installs informed and tamper-evident,
+      not safe-from-strangers. Share with people you trust; read what people send you.
+    </div>
+  </section>
+
+  <!-- ================= THE DEEP ================= -->
+  <footer>
+    <span class="depth">10 911 m · challenger deep</span>
+    <div class="shark-art" aria-hidden="true">                                     ,
+                                   .';
+               .--------------.  .' (
+              /                \/    ;
+   ______    /                  \    |
+  /      '--'   skillshark       \   |
+ |  ________     v0.1.0       <span class="eye">o</span>  '--'-----.____
+  \ \      '-.                              _.-'
+   \ \        '----.____________     ___.--'
+    '-'             \           \---/   \
+                     \           \ /     '.
+                      '._________'/        '-.
+                                 /____________.'</div>
+    <p class="abyss-line">YOU HAVE REACHED THE BOTTOM · NOTHING IS RUNNING DOWN HERE</p>
+    <p class="no-server">there is no server — github is the backend</p>
+    <div class="foot-links">
+      <a href="https://www.npmjs.com/package/skillshark">npm install -g skillshark</a> ·
+      <a href="https://github.com/Holy-Coders/skillshark">source</a> ·
+      MIT © Aaron Turkel
+    </div>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- bioluminescent motes ---- */
+  var motes = document.getElementById('motes');
+  for (var i = 0; i < 26; i++) {
+    var m = document.createElement('div');
+    m.className = 'mote';
+    var s = 1 + Math.random() * 2.5;
+    m.style.width = m.style.height = s + 'px';
+    m.style.left = (Math.random() * 100) + 'vw';
+    m.style.top = (Math.random() * 100) + 'vh';
+    m.style.setProperty('--dx', (Math.random() * 90 - 45) + 'px');
+    m.style.setProperty('--dy', (-30 - Math.random() * 80) + 'px');
+    m.style.setProperty('--dur', (9 + Math.random() * 14) + 's');
+    m.style.animationDelay = (-Math.random() * 20) + 's';
+    motes.appendChild(m);
+  }
+
+  /* ---- copy button ---- */
+  var btn = document.getElementById('copy-btn');
+  btn.addEventListener('click', function () {
+    var text = 'npx skillshark install <link>';
+    function done(ok) {
+      btn.textContent = ok ? 'COPIED ✓' : 'SELECT IT';
+      setTimeout(function () { btn.textContent = 'COPY'; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else { done(false); }
+  });
+
+  /* ---- reveal on scroll ---- */
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+
+  /* ---- terminal transcripts ---- */
+  // each line: [mode, [ [class, text], ... ]]  mode: 'type' (char by char) | 'print'
+  var FP = '3f9a7c21';
+  var LINK = 'https://gist.github.com/8a1bc94ef23d4b6a9c01e57f8d2a4b3c#fp=' + FP;
+
+  var SEND = [
+    ['type',  [['c-prompt','$ '], ['c-cmd','skillshark share /j']]],
+    ['print', [['c-dim','  Found skill "j" (claude-code) at .claude/skills/j — 2 files, 1.1 KB']]],
+    ['print', [['c-warn','  ⚠ Skipped .env (secret pattern)'], ['c-dim',' — pass --force to include']]],
+    ['print', [['', '']]],
+    ['print', [['c-ok','  ✓ Uploaded as a secret gist'], ['c-dim',' (unlisted — anyone with the link can read it)']]],
+    ['print', [['c-ok','  ✓ Link copied to clipboard'], ['c-dim',' · advisory expiry in 7 days']]],
+    ['print', [['', '']]],
+    ['print', [['c-url','  ' + LINK]]],
+    ['print', [['', '']]],
+    ['print', [['c-dim','  They run:   skillshark install <the link>     (no GitHub account needed)']]],
+    ['print', [['c-dim','  Undo:       skillshark revoke j               (deletes the gist)']]]
+  ];
+
+  var RECV = [
+    ['type',  [['c-prompt','$ '], ['c-cmd','npx skillshark install ' ], ['c-url', LINK.slice(0, 40) + '…#fp=' + FP]]],
+    ['print', [['c-dim','  Skill:  '], ['','j']]],
+    ['print', [['c-dim','  Type:   '], ['','skill'], ['c-dim','          Agent: claude-code']]],
+    ['print', [['c-dim','  Fingerprint: 3f9a-7c21  '], ['c-ok','✓ matches #fp in the link']]],
+    ['print', [['', '']]],
+    ['print', [['c-tree','    j/']]],
+    ['print', [['c-tree','    ├── '], ['','SKILL.md           '], ['c-dim','1.0 KB']]],
+    ['print', [['c-tree','    └── '], ['','scripts/jump.sh    '], ['c-dim','0.1 KB   '], ['c-warn','(executable)']]],
+    ['print', [['', '']]],
+    ['print', [['c-warn','  ⚠ 1 executable script.'], ['c-dim',' Installed without the executable bit.']]],
+    ['print', [['', '']]],
+    ['print', [['c-ok','  ✓ Verified checksums']]],
+    ['print', [['c-ok','  ✓ Installed to .claude/skills/j']]],
+    ['print', [['c-dim','  Available in Claude Code as the "j" skill — restart the session to pick it up.']]]
+  ];
+
+  function renderInstant(pre, lines) {
+    lines.forEach(function (line) {
+      line[1].forEach(function (seg) {
+        var span = document.createElement('span');
+        if (seg[0]) span.className = seg[0];
+        span.textContent = seg[1];
+        pre.appendChild(span);
+      });
+      pre.appendChild(document.createTextNode('\n'));
+    });
+  }
+
+  function play(pre, lines, onDone) {
+    var cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    pre.appendChild(cursor);
+    var li = 0;
+
+    function nextLine() {
+      if (li >= lines.length) {
+        cursor.remove();
+        if (onDone) onDone();
+        return;
+      }
+      var mode = lines[li][0];
+      var segs = lines[li][1];
+      var si = 0, ci = 0;
+      var span = null;
+
+      function step() {
+        if (si >= segs.length) {
+          pre.insertBefore(document.createTextNode('\n'), cursor);
+          li++;
+          setTimeout(nextLine, mode === 'type' ? 320 : (segs.length === 1 && segs[0][1] === '' ? 40 : 90));
+          return;
+        }
+        if (mode === 'print') {
+          for (; si < segs.length; si++) {
+            var s = document.createElement('span');
+            if (segs[si][0]) s.className = segs[si][0];
+            s.textContent = segs[si][1];
+            pre.insertBefore(s, cursor);
+          }
+          step();
+          return;
+        }
+        if (!span) {
+          span = document.createElement('span');
+          if (segs[si][0]) span.className = segs[si][0];
+          pre.insertBefore(span, cursor);
+        }
+        var text = segs[si][1];
+        if (ci < text.length) {
+          span.textContent += text[ci++];
+          setTimeout(step, 26 + Math.random() * 40);
+        } else {
+          si++; ci = 0; span = null;
+          step();
+        }
+      }
+      step();
+    }
+    nextLine();
+  }
+
+  var sendPre = document.getElementById('t-send');
+  var recvPre = document.getElementById('t-recv');
+
+  if (reduced) {
+    renderInstant(sendPre, SEND);
+    renderInstant(recvPre, RECV);
+  } else {
+    var played = false;
+    var tio = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && !played) {
+          played = true;
+          play(sendPre, SEND, function () {
+            setTimeout(function () { play(recvPre, RECV); }, 700);
+          });
+          tio.disconnect();
+        }
+      });
+    }, { threshold: 0.3 });
+    tio.observe(sendPre);
+  }
+})();
+</script>
+</body>
+</html>

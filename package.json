@@ -11,6 +11,14 @@
     "src",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Holy-Coders/skillshark.git"
+  },
+  "homepage": "https://holy-coders.github.io/skillshark/",
+  "bugs": {
+    "url": "https://github.com/Holy-Coders/skillshark/issues"
+  },
   "keywords": [
     "claude-code",
     "agent-skills",
