@@ -248,6 +248,29 @@ async function chooseScope(agent, kind, name, opts, deps, interactive, loud) {
   );
 }
 
+// Interactive installs offer a rename up front (the --name flag skips this).
+async function askInstallName(deps, current) {
+  const choice = await deps.prompts.select({
+    message: 'Name it:',
+    options: [
+      { value: 'keep', label: `Keep "${current}"` },
+      { value: 'rename', label: 'Install under a different name…' },
+    ],
+  });
+  if (choice === null) return null; // cancelled
+  if (choice === 'keep') return current;
+  for (;;) {
+    const entered = deps.prompts.text
+      ? await deps.prompts.text({ message: 'Install as:', placeholder: current })
+      : null;
+    if (entered === null) return current; // backed out of typing → keep
+    const name = String(entered).trim();
+    if (!name) return current;
+    if (NAME_RE.test(name)) return name;
+    deps.ui.warn('Names are letters, digits, ".", "_", "-". Try again.');
+  }
+}
+
 // Build the exact file set that will land on disk (post-rename, post-conversion).
 function buildPlan({ workDir, manifest, name, agentId, kind, target, deps, loud }) {
   const agent = getAgent(agentId);
@@ -411,6 +434,7 @@ export async function runInstall(sourceStr, opts, deps) {
 
     // step 6 — destination: --dir verbatim, or agent + scope (+ rename/conversion)
     let makePlan;
+    let installName = opts.name ?? manifest.name;
     if (opts.dir) {
       if (opts.name && opts.name !== manifest.name) {
         ui.warn('--name is ignored with --dir (the directory you chose is the name).');
@@ -432,7 +456,16 @@ export async function runInstall(sourceStr, opts, deps) {
           2,
         );
       }
-      const baseName = opts.name ?? manifest.name;
+      let baseName = opts.name ?? manifest.name;
+      // keep it, or take it under a new name? (--name decides silently)
+      if (interactive && !opts.name) {
+        const chosen = await askInstallName(deps, baseName);
+        if (chosen === null) {
+          ui.out('  Cancelled. Nothing was installed.');
+          return { status: 'cancelled' };
+        }
+        baseName = chosen;
+      }
       const scope = await chooseScope(agent, kind, baseName, opts, deps, interactive, loud);
       if (scope.cancelled) {
         ui.out('  Cancelled. Nothing was installed.');
@@ -449,11 +482,12 @@ export async function runInstall(sourceStr, opts, deps) {
           deps,
           loud: loud && !quiet,
         });
+      installName = baseName;
     }
     let plan = makePlan();
 
     // step 7 — conflict
-    let planName = opts.name ?? manifest.name;
+    let planName = installName;
     for (;;) {
       if (!existsSync(plan.target)) break;
       const existingFiles = await existingTreeFor(plan.target, plan);

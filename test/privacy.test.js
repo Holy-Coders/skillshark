@@ -216,3 +216,59 @@ test('--no-encrypt opts out: plaintext layout with SKILL.md preview and #fp-only
   assert.match(res.url, /#fp=[0-9a-f]{8}$/);
   assert.match(deps.ui.text(), /UNENCRYPTED/);
 });
+
+// --- shares: recalling links you created -------------------------------------------
+
+test('shares: the full keyed link is stored locally and recallable, one-liner re-copied', async () => {
+  const { runShares } = await import('../src/share.js');
+  const { deps, res } = await shareEncrypted().then(async ({ deps, gistBody, res }) => ({ deps, gistBody, res }));
+
+  // stored record carries the complete url (key fragment included)
+  const { loadConfig } = await import('../src/config.js');
+  const cfg = await loadConfig(deps.configDir);
+  assert.equal(cfg.shares[0].url, res.url);
+  assert.ok(cfg.shares[0].url.includes('#k='), 'the key must be stored so the sender can recall it');
+  assert.equal(cfg.shares[0].encrypted, true);
+  assert.ok(cfg.shares[0].createdAt, 'records carry createdAt');
+
+  // list mode
+  const listDeps = { ...deps, ui: silentUi() };
+  const listed = await runShares(null, {}, listDeps);
+  assert.equal(listed.count, 1);
+  assert.match(listDeps.ui.text(), /covert/);
+  assert.match(listDeps.ui.text(), /expires in/);
+
+  // detail mode re-copies the exact paste-and-go one-liner
+  let copied = null;
+  const detailDeps = { ...deps, ui: silentUi(), clipboard: async (t) => { copied = t; return true; } };
+  const shown = await runShares('covert', {}, detailDeps);
+  assert.equal(shown.url, res.url);
+  assert.equal(copied, `npx skillshark install '${res.url}'`);
+  assert.match(detailDeps.ui.text(), /copied to clipboard/);
+
+  // -q prints just the URL; unknown names exit 2 with the known list
+  const qDeps = { ...deps, ui: silentUi() };
+  await runShares('covert', { quiet: true }, qDeps);
+  assert.equal(qDeps.ui.lines.at(-1), res.url);
+  await assert.rejects(
+    () => runShares('nope', {}, { ...deps, ui: silentUi() }),
+    (e) => e instanceof CliError && e.exitCode === 2 && /covert/.test(e.message),
+  );
+});
+
+test('shares: the config file holding keys is owner-only (0600)', async () => {
+  const { deps } = await shareEncrypted();
+  const { stat } = await import('node:fs/promises');
+  const mode = (await stat(path.join(deps.configDir, 'config.json'))).mode & 0o777;
+  assert.equal(mode, 0o600, `config.json must be 0600, got ${mode.toString(8)}`);
+});
+
+test('shares: revoke removes the record, so dead links stop being offered', async () => {
+  const { runShares, runRevoke } = await import('../src/share.js');
+  const { deps } = await shareEncrypted();
+  deps.ghApi = async () => '';
+  await runRevoke('covert', { yes: true }, deps);
+  const listDeps = { ...deps, ui: silentUi() };
+  const listed = await runShares(null, {}, listDeps);
+  assert.equal(listed.count, 0);
+});

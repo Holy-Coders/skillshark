@@ -8,7 +8,7 @@ import { getConfigDir } from '../src/config.js';
 import { makeUi, realPrompts, attachSpinner } from '../src/ui.js';
 import { makeGhApi } from '../src/gh.js';
 import { copyToClipboard } from '../src/clipboard.js';
-import { runShare, runRevoke } from '../src/share.js';
+import { runShare, runRevoke, runShares } from '../src/share.js';
 import { runInstall, runInspect } from '../src/install.js';
 import { runInteractive } from '../src/interactive.js';
 
@@ -19,9 +19,10 @@ USAGE
   skillshark <command> [options]
 
 COMMANDS
-  share    <path|name>   Package a skill and upload it as a secret gist
+  share    <path|name>   Package a skill and upload it as an encrypted secret gist
   install  <source>      Download, verify, preview, and install a shared skill
   inspect  <source>      Preview a shared skill without installing anything
+  shares   [name|id]     Recall links you've shared — re-copies the one-liner
   revoke   <id|name>     Delete a share you created (deletes the gist)
 
 SOURCES (install / inspect)
@@ -121,6 +122,18 @@ from checksummed bytes. Expired shares still display (only install refuses).`,
       --json            Print { revoked: <id> }
 
 Deletes the underlying gist via your gh auth. The link dies immediately.`,
+  shares: `skillshark shares [name|id] — recall the links you've shared
+
+  With no argument: list every share recorded on this machine (newest first).
+  With a name or gist id: print that share's full link — decryption key
+  included — and copy the paste-and-go install one-liner back to the clipboard.
+
+      --no-clipboard    Don't copy the one-liner
+  -q, --quiet           Print only the URL(s)
+      --json            Machine-readable records
+
+Links (keys included) live in your local config (chmod 600), so only the
+machine that created a share can recall it. Lost everywhere? Just share again.`,
 };
 
 // flag spec: long name → { short, takesValue, key }
@@ -156,6 +169,9 @@ const COMMAND_FLAGS = {
     files: { key: 'files' },
   },
   revoke: {},
+  shares: {
+    'no-clipboard': { key: 'noClipboard' },
+  },
 };
 
 function parseArgv(argv) {
@@ -230,9 +246,9 @@ async function main() {
     return 0;
   }
 
-  const known = new Set(['share', 'install', 'inspect', 'revoke', 'interactive']);
+  const known = new Set(['share', 'install', 'inspect', 'revoke', 'shares', 'interactive']);
   if (!known.has(parsed.command)) {
-    throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, revoke. Try: skillshark --help`, 2);
+    throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, shares, revoke. Try: skillshark --help`, 2);
   }
   if (parsed.positionals.length > 1) {
     throw new CliError(`Too many arguments: ${parsed.positionals.slice(1).join(' ')}`, 2);
@@ -264,7 +280,7 @@ async function main() {
   }
 
   const arg = parsed.positionals[0];
-  if (!arg) {
+  if (!arg && parsed.command !== 'shares') {
     // bare subcommand in a TTY → that command's wizard; piped → usage error
     if (effectiveTTY) return runInteractive(deps, parsed.command);
     const noun = parsed.command === 'share' ? '<path|name>' : parsed.command === 'revoke' ? '<id|name>' : '<source>';
@@ -283,6 +299,9 @@ async function main() {
       return 0;
     case 'revoke':
       await runRevoke(arg, parsed.opts, deps);
+      return 0;
+    case 'shares':
+      await runShares(arg ?? null, parsed.opts, deps);
       return 0;
     default:
       return 2;

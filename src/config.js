@@ -1,7 +1,7 @@
 // Client-side state: ~/.config/skillshark/ (or $SKILLSHARK_CONFIG_DIR).
 // config.json — shares cache so `revoke <name>` resolves offline.
 // installs.json — local install records (client-side by design).
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -19,7 +19,10 @@ async function readJson(file, fallback) {
 
 async function writeJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value, null, 2) + '\n');
+  // the share cache holds full links — including decryption keys — so it is
+  // readable by the owner only
+  await writeFile(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
+  await chmod(file, 0o600).catch(() => {});
 }
 
 export async function loadConfig(dir) {

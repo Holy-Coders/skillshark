@@ -10,7 +10,7 @@ import { treeFingerprint, fp8 } from './fingerprint.js';
 import { generateLinkSecret, encodeSecret, encryptTarball } from './crypt.js';
 import { VERSION as TOOL_VERSION } from './version.js';
 import { createGist, deleteGist, gistDescription, GIST_PAYLOAD_LIMIT } from './transports/gist.js';
-import { addShareRecord, findShareRecord, removeShareRecord } from './config.js';
+import { addShareRecord, findShareRecord, removeShareRecord, loadConfig } from './config.js';
 import { humanSize, displayPath, plural } from './ui.js';
 import { VERSION } from './version.js';
 
@@ -197,11 +197,16 @@ export async function runShare(arg, opts, deps) {
   // the paste-and-go line: receivers run this with zero setup
   const installCommand = `npx skillshark install '${url}'`;
 
+  // the full link — key fragment included — is kept locally so the sender
+  // can always pull it back up with `skillshark shares <name>`
   await addShareRecord(deps.configDir, {
     id,
     name: manifest.name,
     url,
+    encrypted,
+    fingerprint,
     revision,
+    createdAt: manifest.createdAt,
     expiresAt: manifest.expiresAt,
     ...(host !== DEFAULT_HOST ? { host } : {}),
   });
@@ -244,6 +249,86 @@ export async function runShare(arg, opts, deps) {
     ui.out(`  Undo:       skillshark revoke ${manifest.name}   (deletes the gist)`);
   }
   return { status: 'shared', id, url, installCommand, fingerprint, encrypted };
+}
+
+// --- shares: recall the links you created --------------------------------------
+
+function shareState(rec, now = Date.now()) {
+  if (!rec.expiresAt) return 'no expiry';
+  const exp = Date.parse(rec.expiresAt);
+  if (Number.isNaN(exp)) return 'no expiry';
+  if (exp < now) return 'expired';
+  const days = Math.floor((exp - now) / 86400000);
+  return days >= 1 ? `expires in ${days}d` : `expires in ${Math.max(1, Math.floor((exp - now) / 3600000))}h`;
+}
+
+// `skillshark shares` — list everything you've shared (newest first).
+// `skillshark shares <name|id>` — print that share's full link and put the
+// paste-and-go one-liner back on the clipboard, exactly like share did.
+export async function runShares(arg, opts, deps) {
+  const ui = deps.ui;
+  const cfg = await loadConfig(deps.configDir);
+  const shares = cfg.shares;
+
+  if (!arg) {
+    if (opts.json) {
+      ui.out(JSON.stringify(shares, null, 2));
+      return { status: 'listed', count: shares.length };
+    }
+    if (shares.length === 0) {
+      ui.out('  No shares recorded on this machine. Make one:  skillshark share <name>');
+      return { status: 'listed', count: 0 };
+    }
+    if (opts.quiet) {
+      for (const s of shares) ui.out(s.url);
+      return { status: 'listed', count: shares.length };
+    }
+    const width = Math.max(...shares.map((s) => s.name.length)) + 2;
+    for (const s of shares) {
+      const bits = [
+        s.encrypted === false ? 'plain' : '🔐',
+        shareState(s),
+        s.host ? s.host : null,
+        (s.createdAt ?? '').slice(0, 10) || null,
+      ].filter(Boolean);
+      ui.out(`  ${s.name.padEnd(width)}${bits.join(' · ')}`);
+    }
+    ui.out('');
+    ui.out('  Get a link back:   skillshark shares <name>     (copies the install one-liner)');
+    ui.out('  Kill a link:       skillshark revoke <name>');
+    return { status: 'listed', count: shares.length };
+  }
+
+  const rec = shares.find((s) => s.id === arg) ?? shares.find((s) => s.name === arg);
+  if (!rec) {
+    const names = [...new Set(shares.map((s) => s.name))];
+    throw new CliError(
+      `No share named "${arg}" on this machine.${names.length ? `\nKnown: ${names.slice(0, 10).join(', ')}` : ' (Shares made elsewhere can\'t be recovered here — the key never leaves the machine that made it.)'}`,
+      2,
+    );
+  }
+  const installCommand = `npx skillshark install '${rec.url}'`;
+  if (opts.json) {
+    ui.out(JSON.stringify({ ...rec, installCommand }, null, 2));
+    return { status: 'shown', id: rec.id };
+  }
+  if (opts.quiet) {
+    ui.out(rec.url);
+    return { status: 'shown', id: rec.id };
+  }
+  let copied = false;
+  if (!opts.noClipboard && deps.clipboard) copied = await deps.clipboard(installCommand);
+  const state = shareState(rec);
+  ui.out(`  ${rec.name} · ${rec.encrypted === false ? 'plain' : 'encrypted'} · ${state}${rec.host ? ` · ${rec.host}` : ''}`);
+  if (copied) ui.ok('Install one-liner copied to clipboard — paste it anywhere');
+  ui.out('');
+  ui.out(`  ${installCommand}`);
+  ui.out('');
+  if (state === 'expired') {
+    ui.warn(`Past its advisory expiry — installs will refuse it. Re-share with:  skillshark share ${rec.name}`);
+  }
+  ui.out(`  Undo:  skillshark revoke ${rec.name}`);
+  return { status: 'shown', id: rec.id, url: rec.url, installCommand };
 }
 
 // --- revoke (§4.4) -----------------------------------------------------------

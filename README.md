@@ -37,7 +37,7 @@ Once it's on your PATH, running bare **`skillshark`** opens an interactive sessi
 
 Requirements: Node ≥ 20. **Senders** also need the [GitHub CLI](https://cli.github.com) authenticated (`gh auth login`). **Receivers need nothing** — public links are fetched over plain anonymous HTTPS.
 
-## The four commands
+## The commands
 
 **share** — package a skill, seal it (AES-256-GCM), and get a private link. Your clipboard receives the full **paste-and-go install one-liner** — the `#k=` fragment in it is the decryption key, derived per-share from a fresh secret and salt:
 
@@ -58,7 +58,7 @@ skillshark install <gist-id>                               # bare id works too
 skillshark install gh:acme/skills/review@main              # any public repo path
 ```
 
-Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd looks like a project, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`, and:
+Interactive installs ask whether to **keep the name or rename it** before anything is written. Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd looks like a project, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`, and:
 
 - `--name <name>` — install under a different name. The directory/filename changes and the artifact's frontmatter `name:` is rewritten to match, so two variants of the same skill can live side by side.
 - `--agent <id>` — install for a different tool entirely (see below).
@@ -70,6 +70,13 @@ skillshark inspect <link> --cat SKILL.md
 ```
 
 Inspect downloads, decrypts, and verifies the full package, so what you read is ground truth from checksummed bytes — never sender-declared metadata. (For `--no-encrypt` shares, the gist page itself doubles as a browser preview; encrypted gists show only ciphertext, by design.)
+
+**shares** — recall any link you've shared (keys included — they're stored, owner-only `0600`, in your local config, so only the machine that made a share can recall it):
+
+```sh
+skillshark shares            # list everything you've shared
+skillshark shares j          # full link again + one-liner back on the clipboard
+```
 
 **revoke** — delete a share you created:
 

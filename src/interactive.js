@@ -5,7 +5,7 @@
 import { CliError } from './errors.js';
 import { discoverAll } from './discover.js';
 import { parseSource } from './source.js';
-import { runShare, runRevoke } from './share.js';
+import { runShare, runRevoke, runShares } from './share.js';
 import { runInstall, runInspect } from './install.js';
 import { loadConfig } from './config.js';
 import { displayPath } from './ui.js';
@@ -109,6 +109,38 @@ async function wizardInspect(deps, u) {
   return { status: 'inspected' };
 }
 
+// --- my-shares wizard ----------------------------------------------------------------
+
+async function wizardShares(deps, { clack }) {
+  const cfg = await loadConfig(deps.configDir);
+  if (!cfg.shares.length) {
+    clack.log.warn('No shares recorded on this machine yet.');
+    return { status: 'listed' };
+  }
+  const pick = await clack.select({
+    message: 'Which share?',
+    maxItems: 12,
+    options: cfg.shares.map((s) => ({
+      value: s.id,
+      label: s.name,
+      hint: `${s.encrypted === false ? 'plain' : 'encrypted'} · ${(s.createdAt ?? '').slice(0, 10) || s.id.slice(0, 8)}${s.host ? ` · ${s.host}` : ''}`,
+    })),
+  });
+  if (bail(clack, pick)) return { status: 'cancelled' };
+  const result = await runShares(pick, {}, deps);
+  const next = await clack.select({
+    message: 'And now?',
+    options: [
+      { value: 'done', label: 'Done', hint: 'the one-liner is on your clipboard' },
+      { value: 'revoke', label: 'Revoke it', hint: 'delete the gist — the link dies' },
+    ],
+  });
+  if (!bail(clack, next) && next === 'revoke') {
+    return runRevoke(result.id, {}, deps);
+  }
+  return result;
+}
+
 // --- revoke wizard -----------------------------------------------------------------
 
 async function wizardRevoke(deps, { clack, pc }) {
@@ -145,6 +177,7 @@ const WIZARDS = {
   share: wizardShare,
   install: wizardInstall,
   inspect: wizardInspect,
+  shares: wizardShares,
   revoke: wizardRevoke,
 };
 
@@ -165,9 +198,10 @@ export async function runInteractive(deps, action = null) {
     const choice = await clack.select({
       message: 'What are we doing?',
       options: [
-        { value: 'share', label: 'Share', hint: 'package a local skill → unlisted link' },
+        { value: 'share', label: 'Share', hint: 'package a local skill → encrypted link' },
         { value: 'install', label: 'Install', hint: 'from a link or repo path' },
         { value: 'inspect', label: 'Inspect', hint: 'look before you leap' },
+        { value: 'shares', label: 'My shares', hint: 'recall a link you already made' },
         { value: 'revoke', label: 'Revoke', hint: 'kill a link you shared' },
         { value: 'quit', label: 'Quit' },
       ],

@@ -374,7 +374,7 @@
   <section>
     <span class="depth">1 000 m · midnight zone</span>
     <p class="kicker">the surface area</p>
-    <h2>Four commands. That's the tool.</h2>
+    <h2>Five commands. That's the tool.</h2>
     <div class="cmds">
       <div class="cmd reveal">
         <h3><span class="verb">share</span> &lt;path|name&gt;</h3>
@@ -395,6 +395,12 @@ $ skillshark install gh:acme/skills/review@main</pre>
         <pre>$ skillshark inspect &lt;link&gt; --cat SKILL.md</pre>
       </div>
       <div class="cmd reveal">
+        <h3><span class="verb">shares</span> [name]</h3>
+        <p>Recall any link you've shared — the key never left your machine, so the full one-liner comes right back to your clipboard.</p>
+        <pre>$ skillshark shares
+$ skillshark shares j   <span class="c-dim"># copies the install one-liner again</span></pre>
+      </div>
+      <div class="cmd reveal">
         <h3><span class="verb">revoke</span> &lt;id|name&gt;</h3>
         <p>Deletes the gist via your gh auth — it remembers which host a share went to. The link dies; installers get an honest message.</p>
         <pre>$ skillshark revoke j
@@ -402,7 +408,7 @@ $ skillshark install gh:acme/skills/review@main</pre>
       </div>
     </div>
     <p class="grid-note reveal">Prefer menus? Run bare <code>skillshark</code> for an interactive session: a picker over
-    every skill on your machine, paste-a-link installs, guided revokes, spinners on the slow parts.
+    every skill on your machine, paste-a-link installs with a keep-or-rename prompt, share recall, guided revokes, spinners on the slow parts.
     Bare <code>skillshark share</code> / <code>install</code> / <code>inspect</code> / <code>revoke</code> jump straight to that command's wizard.</p>
   </section>
 

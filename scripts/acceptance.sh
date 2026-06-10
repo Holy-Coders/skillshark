@@ -62,6 +62,16 @@ ID="${URL##*gist.github.com/}"; ID="${ID%%#*}"
 FP="${URL##*&fp=}"
 KEY="${URL##*#k=}"; KEY="${KEY%%&*}"
 
+# --- c2. the sender can recall the full keyed link --------------------------------
+step "c2. shares recall"
+RECALLED="$($SKILLSHARK shares "$NAME" -q --no-clipboard)"
+[ "$RECALLED" = "$URL" ] || die "recalled link differs: $RECALLED"
+LIST_OUT="$($SKILLSHARK shares)"
+[[ "$LIST_OUT" == *"$NAME"* ]] || die "shares list is missing $NAME"
+CFG_MODE="$(stat -f '%Lp' "$CFG/config.json" 2>/dev/null || stat -c '%a' "$CFG/config.json")"
+[ "$CFG_MODE" = "600" ] || die "config.json mode $CFG_MODE, expected 600"
+echo "   full link (key included) recalled; config is 0600"
+
 # --- d. it really is secret ------------------------------------------------------
 step "d. gist is secret"
 PUBLIC="$(gh api "gists/$ID" -q .public)"
