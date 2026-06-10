@@ -1,0 +1,44 @@
+{
+  "name": "skillshark",
+  "version": "0.1.0",
+  "description": "Share agent skills like files — secret gists out, safe verified installs in. No server; GitHub is the backend.",
+  "type": "module",
+  "bin": {
+    "skillshark": "./bin/skillshark.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AaronDovTurkel/skillshark.git"
+  },
+  "homepage": "https://github.com/AaronDovTurkel/skillshark#readme",
+  "bugs": {
+    "url": "https://github.com/AaronDovTurkel/skillshark/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "agent-skills",
+    "skills",
+    "gist",
+    "cli",
+    "sharing"
+  ],
+  "author": "Aaron Turkel",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'",
+    "acceptance": "bash scripts/acceptance.sh"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "picocolors": "^1.1.1",
+    "tar": "^7.4.3"
+  },
+  "license": "MIT"
+}
