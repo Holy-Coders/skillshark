@@ -99,5 +99,10 @@ export async function realPrompts() {
       if (clack.isCancel(value)) return null;
       return value;
     },
+    async text({ message, placeholder }) {
+      const value = await clack.text({ message, placeholder });
+      if (clack.isCancel(value)) return null;
+      return String(value ?? '').trim();
+    },
   };
 }

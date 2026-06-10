@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { sha256hex } from './fingerprint.js';
 import { CliError } from './errors.js';
+import { AGENTS, AGENT_IDS, classifyByConvention, artifactBaseName, parseGeminiToml } from './agents.js';
 
 // Never packaged, not even with --force.
 const HARD_EXCLUDE_DIRS = new Set(['.git', 'node_modules']);
@@ -30,14 +31,24 @@ function secretMatch(name) {
 
 // --- share-argument resolution (§4.1) ---------------------------------------
 
-// Candidate locations for a bare name, in search order.
+// Candidate locations for a bare name, in search order: claude-code first
+// (project before global), then every other adapter in registry order.
 export function nameCandidates(name, { cwd, home }) {
-  return [
-    { root: path.join(cwd, '.claude', 'skills', name), isDir: true, type: 'skill', where: '.claude/skills (project)' },
-    { root: path.join(cwd, '.claude', 'commands', `${name}.md`), isDir: false, type: 'command', where: '.claude/commands (project)' },
-    { root: path.join(home, '.claude', 'skills', name), isDir: true, type: 'skill', where: '~/.claude/skills (global)' },
-    { root: path.join(home, '.claude', 'commands', `${name}.md`), isDir: false, type: 'command', where: '~/.claude/commands (global)' },
-  ];
+  const out = [];
+  for (const id of AGENT_IDS) {
+    for (const loc of AGENTS[id].locations) {
+      const base = loc.scope === 'project' ? cwd : home;
+      const rel = loc.rel(name);
+      out.push({
+        root: path.join(base, ...rel),
+        isDir: loc.container === 'dir',
+        type: loc.kind,
+        agent: id,
+        where: `${loc.scope === 'project' ? '' : '~/'}${rel.slice(0, -1).join('/')} (${loc.scope}, ${AGENTS[id].label})`,
+      });
+    }
+  }
+  return out;
 }
 
 async function existsAs(p, wantDir) {
@@ -49,38 +60,33 @@ async function existsAs(p, wantDir) {
   }
 }
 
-// Classify an explicit path by its on-disk convention (§4.1): a directory under
-// .claude/skills → skill, a .md under .claude/commands → command, otherwise
-// prompt (file) or bundle (directory).
+// Classify an explicit path by its on-disk convention (§4.1): any adapter
+// convention wins; otherwise prompt (file) or bundle (directory).
 export function classifyPath(absPath, isDir) {
-  const norm = absPath.split(path.sep).join('/');
-  if (isDir && /\/\.claude\/skills\/[^/]+$/.test(norm)) return { type: 'skill', agent: 'claude-code' };
-  if (!isDir && /\/\.claude\/commands\/[^/]+\.md$/.test(norm)) return { type: 'command', agent: 'claude-code' };
+  const hit = classifyByConvention(absPath, isDir);
+  if (hit) return hit;
   return { type: isDir ? 'bundle' : 'prompt', agent: '' };
 }
 
-// List every skill/command name visible from here (for suggestions).
+// List every artifact name visible from here, across all adapters (suggestions).
 export async function knownNames({ cwd, home }) {
   const names = new Set();
-  for (const dir of [
-    path.join(cwd, '.claude', 'skills'),
-    path.join(home, '.claude', 'skills'),
-  ]) {
-    try {
-      for (const ent of await readdir(dir, { withFileTypes: true })) {
-        if (ent.isDirectory()) names.add(ent.name);
-      }
-    } catch { /* location absent */ }
-  }
-  for (const dir of [
-    path.join(cwd, '.claude', 'commands'),
-    path.join(home, '.claude', 'commands'),
-  ]) {
-    try {
-      for (const ent of await readdir(dir, { withFileTypes: true })) {
-        if (ent.isFile() && ent.name.endsWith('.md')) names.add(ent.name.slice(0, -3));
-      }
-    } catch { /* location absent */ }
+  for (const id of AGENT_IDS) {
+    for (const loc of AGENTS[id].locations) {
+      const base = loc.scope === 'project' ? cwd : home;
+      // rel('') gives us the parent dir + the filename pattern's extension
+      const probe = loc.rel('@');
+      const dir = path.join(base, ...probe.slice(0, -1));
+      const suffix = probe[probe.length - 1].replace('@', '');
+      try {
+        for (const ent of await readdir(dir, { withFileTypes: true })) {
+          if (loc.container === 'dir' && ent.isDirectory()) names.add(ent.name);
+          else if (loc.container === 'file' && ent.isFile() && suffix && ent.name.endsWith(suffix)) {
+            names.add(artifactBaseName(ent.name));
+          }
+        }
+      } catch { /* location absent */ }
+    }
   }
   return [...names].sort();
 }
@@ -129,13 +135,13 @@ export async function resolveShareArg(arg, { cwd, home }) {
   const matches = [];
   for (const cand of nameCandidates(name, { cwd, home })) {
     if (await existsAs(cand.root, cand.isDir)) {
-      matches.push({ ...cand, agent: 'claude-code' });
+      matches.push(cand);
     }
   }
   if (matches.length === 0) {
     const known = await knownNames({ cwd, home });
     const near = nearestNames(name, known);
-    let msg = `No skill named "${name}" found here or in ~/.claude.`;
+    let msg = `No skill named "${name}" found here or in any known agent location.`;
     if (near.length) msg += `\nDid you mean: ${near.join(', ')}?`;
     else if (known.length) msg += `\nAvailable: ${known.slice(0, 8).join(', ')}`;
     throw new CliError(msg, 2);
@@ -253,22 +259,27 @@ export function primaryDocPath(files, { isDir, type }) {
 
 // name: frontmatter `name:` → basename (--name overrides, applied by caller).
 // description: frontmatter → first heading → first paragraph → "".
+// Dialect-aware: .md/.mdc/.prompt.md use YAML frontmatter; .toml is gemini.
 export async function inferMetadata({ root, isDir, type, agent, files }) {
   let fm = {};
   let body = '';
   const docRel = primaryDocPath(files, { isDir, type });
   if (docRel) {
     const docAbs = isDir ? path.join(root, ...docRel.split('/')) : root;
-    if (docAbs.endsWith('.md') || docRel.endsWith('.md')) {
-      try {
-        const text = await readFile(docAbs, 'utf8');
+    try {
+      const text = await readFile(docAbs, 'utf8');
+      if (docRel.endsWith('.toml')) {
+        const parsed = parseGeminiToml(text);
+        if (parsed.description) fm.description = parsed.description;
+        body = parsed.body ?? '';
+      } else if (/\.(md|mdc)$/.test(docRel)) {
         const parsed = parseFrontmatter(text);
         fm = parsed.data;
         body = parsed.body;
-      } catch { /* unreadable doc → fall back to basenames */ }
-    }
+      }
+    } catch { /* unreadable doc → fall back to basenames */ }
   }
-  const base = path.basename(root).replace(/\.[^.]+$/, '');
+  const base = artifactBaseName(path.basename(root));
   const name = (fm.name && String(fm.name).trim()) || base;
   const description = (fm.description && String(fm.description).trim()) || firstHeadingOrParagraph(body) || '';
   const dependencies = [];

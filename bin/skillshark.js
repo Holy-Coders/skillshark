@@ -38,9 +38,17 @@ GLOBAL OPTIONS
 EXAMPLES
   skillshark share /j                       share the "j" skill (secret gist)
   skillshark install <gist-url|id>          install a shared skill
+  skillshark install <link> --name jmp      install under a different name
+  skillshark install <link> --agent codex   convert for another tool
   skillshark install gh:acme/skills/review  install straight from a repo path
   skillshark inspect <gist-url> --cat SKILL.md
   skillshark revoke j                       delete the share
+
+AGENTS (share from and install to)
+  claude-code (skills, commands) · cursor (rules, commands) · codex (prompts)
+  copilot (prompt files) · windsurf (rules, workflows) · gemini (commands)
+  opencode (commands). Cross-agent installs convert the instructions to the
+  target's dialect; a skill's bundled scripts can't follow it (warned loudly).
 
 Secret gists are unlisted, NOT private — anyone with the link can read them.
 SkillShark never executes package content; install only copies files.`;
@@ -62,10 +70,16 @@ unlisted, not private: anyone holding it can read the gist. Undo with
   install: `skillshark install <source> — download, verify, preview, confirm, copy
 
   -y, --yes             Install without prompting (documented as dangerous)
-      --project         Install into ./.claude/... (default when cwd is a project)
-      --global          Install into ~/.claude/... (all projects)
-      --dir <path>      Install into an explicit directory (required for
-                        prompt/bundle packages; overrides agent detection)
+      --name <name>     Install under a different name (renames the artifact
+                        and updates its frontmatter name)
+      --agent <id>      Target agent: claude-code | cursor | codex | copilot |
+                        windsurf | gemini | opencode. Crossing agents converts
+                        the artifact's instructions to the target's dialect —
+                        bundled support files can't come along (warned).
+      --project         Install at project scope (where the agent supports it)
+      --global          Install at user/global scope
+      --dir <path>      Install verbatim into an explicit directory (required
+                        for bundle packages; skips agent conventions)
       --force           Overwrite an existing, differing artifact
       --allow-exec      Keep executable bits (stripped by default)
   -q, --quiet           Print only the installed path
@@ -113,6 +127,7 @@ const COMMAND_FLAGS = {
     dir: { takesValue: true, key: 'dir' },
     'allow-exec': { key: 'allowExec' },
     agent: { takesValue: true, key: 'agent' },
+    name: { takesValue: true, key: 'name' },
   },
   inspect: {
     cat: { takesValue: true, key: 'cat' },
@@ -195,9 +210,6 @@ async function main() {
   const known = new Set(['share', 'install', 'inspect', 'revoke']);
   if (!known.has(parsed.command)) {
     throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, revoke. Try: skillshark --help`, 2);
-  }
-  if (parsed.opts.agent && parsed.opts.agent !== 'claude-code') {
-    throw new CliError(`Only --agent claude-code is supported in v0.1 (got "${parsed.opts.agent}").`, 2);
   }
 
   const arg = parsed.positionals[0];

@@ -91,6 +91,24 @@ OUT="$(cd "$RECEIVER" && $SKILLSHARK install "$URL" --yes)"
 [[ "$OUT" == *"already installed"* ]] || die "expected 'already installed', got: $OUT"
 echo "   no-op confirmed"
 
+# --- g2. rename on install (--name) ---------------------------------------------------
+step "g2. install --name"
+( cd "$RECEIVER" && $SKILLSHARK install "$URL" --yes --name "$NAME-renamed" >/dev/null )
+RENAMED="$RECEIVER/.claude/skills/$NAME-renamed"
+[ -f "$RENAMED/SKILL.md" ] || die "renamed skill not installed"
+grep -q "name: $NAME-renamed" "$RENAMED/SKILL.md" || die "frontmatter name not rewritten"
+echo "   installed as $NAME-renamed, frontmatter rewritten"
+
+# --- g3. cross-agent install (claude skill → cursor command) ---------------------------
+step "g3. install --agent cursor"
+G3_OUT="$(cd "$RECEIVER" && $SKILLSHARK install "$URL" --yes --agent cursor --project)"
+CURSOR_CMD="$RECEIVER/.cursor/commands/$NAME.md"
+[ -f "$CURSOR_CMD" ] || die "converted cursor command not installed"
+grep -q "hello" "$CURSOR_CMD" || die "converted body missing"
+[[ "$G3_OUT" == *"Converting"* ]] || die "conversion warning not shown"
+[[ "$G3_OUT" == *"hello.sh"* ]] || die "dropped bundled file not named in the warning"
+echo "   converted to .cursor/commands, dropped files warned"
+
 # --- h. tampered #fp must abort with nothing written ---------------------------------
 step "h. tampered #fp aborts"
 set +e

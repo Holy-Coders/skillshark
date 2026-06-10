@@ -44,7 +44,10 @@ skillshark install <gist-id>                               # bare id works too
 skillshark install gh:acme/skills/review@main              # any public repo path
 ```
 
-Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd has `.claude/` or `.git`, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`.
+Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd looks like a project, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`, and:
+
+- `--name <name>` — install under a different name. The directory/filename changes and the artifact's frontmatter `name:` is rewritten to match, so two variants of the same skill can live side by side.
+- `--agent <id>` — install for a different tool entirely (see below).
 
 **inspect** — look before you leap (writes nothing):
 
@@ -63,6 +66,32 @@ skillshark revoke j        # or the gist id
 The gist dies immediately; anyone holding the link gets "deleted by the sender."
 (GitHub's anonymous API cache can serve a just-deleted gist for up to ~a minute
 before the 404 propagates everywhere.)
+
+## Cross-agent sharing (v0.2)
+
+SkillShark speaks seven tools' on-disk dialects. You can **share from** any of them (bare names resolve across all of these locations) and **install to** any of them with `--agent <id>`:
+
+| `--agent` | Artifacts | Where they land |
+|---|---|---|
+| `claude-code` | skills, commands | `.claude/skills/<n>/`, `.claude/commands/<n>.md` (project or `~/`) |
+| `cursor` | rules, commands | `.cursor/rules/<n>.mdc` (project), `.cursor/commands/<n>.md` |
+| `codex` | prompts | `~/.codex/prompts/<n>.md` (Codex only reads global) |
+| `copilot` | prompt files | `.github/prompts/<n>.prompt.md` (project) |
+| `windsurf` | rules, workflows | `.windsurf/rules/<n>.md`, `.windsurf/workflows/<n>.md` (project) |
+| `gemini` | commands | `.gemini/commands/<n>.toml` (TOML, project or `~/`) |
+| `opencode` | commands | `.opencode/command/<n>.md`, `~/.config/opencode/command/<n>.md` |
+
+```sh
+skillshark share draftpr                  # found in ~/.codex/prompts/draftpr.md
+skillshark install <link> --agent cursor  # lands as .cursor/commands/draftpr.md
+```
+
+Crossing agents **converts** the artifact: the instructions (frontmatter + body) are re-rendered in the target's dialect — YAML frontmatter for Claude/Copilot/opencode, `.mdc` for Cursor rules, TOML `prompt`/`description` for Gemini, plain markdown where the tool wants it. Two honest limits, stated loudly at install time:
+
+- **Bundled files don't cross.** A Claude skill's `scripts/` and reference files have no equivalent elsewhere; converting installs the instructions only and names every file left behind.
+- **Conversion is best-effort.** A skill written for one tool may assume features another doesn't have. Read the result.
+
+Same-agent installs are always byte-verbatim — conversion only happens when you cross.
 
 ## Security model
 

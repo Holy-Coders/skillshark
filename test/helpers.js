@@ -168,5 +168,5 @@ export function throwingPrompts() {
   const boom = async () => {
     throw new Error('interactive prompt invoked in a non-interactive test');
   };
-  return { select: boom, confirm: boom };
+  return { select: boom, confirm: boom, text: boom };
 }
