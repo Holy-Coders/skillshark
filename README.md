@@ -1,5 +1,7 @@
 # SkillShark 🦈
 
+**[holy-coders.github.io/skillshark](https://holy-coders.github.io/skillshark/)** · [npm](https://www.npmjs.com/package/skillshark)
+
 **Share an agent skill like you'd share a file.** SkillShark packages a Claude Code skill (or command) into a secret GitHub gist and hands you an unlisted, self-verifying link; the receiver installs it with one command and zero setup — no GitHub account, no server, no registry.
 
 > ⚠️ **Secret gists are unlisted, NOT private — anyone with the link can read them.**
