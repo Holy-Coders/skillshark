@@ -11,17 +11,26 @@
 
 ## Install
 
-Zero-install:
+Zero-install (stable, from npm):
 
 ```sh
 npx skillshark install <link>
 ```
 
-Or globally:
+Want the **beta** — whatever is on `main` right now, ahead of the npm release?
 
 ```sh
-npm install -g skillshark
+npx github:Holy-Coders/skillshark install <link>
 ```
+
+Both forms take the exact same commands and flags; the `github:` one just builds from the repo's latest commit instead of the published package. Or install globally:
+
+```sh
+npm install -g skillshark      # stable
+npm install -g github:Holy-Coders/skillshark   # beta from main
+```
+
+Once it's on your PATH, running bare **`skillshark`** opens an interactive session — pick a local skill to share from a menu, paste a link to install, inspect, or revoke, all guided with previews and spinners. Every flag-driven form below works too (and is what you want in scripts/CI).
 
 Requirements: Node ≥ 20. **Senders** also need the [GitHub CLI](https://cli.github.com) authenticated (`gh auth login`). **Receivers need nothing** — public links are fetched over plain anonymous HTTPS.
 

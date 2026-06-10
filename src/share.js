@@ -153,13 +153,14 @@ export async function runShare(arg, opts, deps) {
     } catch { /* preview is optional */ }
   }
 
-  const { id, revision } = await createGist({
-    manifestJson,
-    primaryDoc,
-    tarballB64: b64,
-    description: gistDescription({ name: manifest.name, agent: manifest.agent, type: manifest.type, fp8: shortFp }),
-    ghApi: deps.ghApi,
-  });
+  const { id, revision } = await ui.spin('Uploading as a secret gist', () =>
+    createGist({
+      manifestJson,
+      primaryDoc,
+      tarballB64: b64,
+      description: gistDescription({ name: manifest.name, agent: manifest.agent, type: manifest.type, fp8: shortFp }),
+      ghApi: deps.ghApi,
+    }));
   const url = `https://gist.github.com/${id}#fp=${shortFp}`;
 
   await addShareRecord(deps.configDir, {

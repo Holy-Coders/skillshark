@@ -379,7 +379,7 @@ export async function runInstall(sourceStr, opts, deps) {
   const interactive = deps.isTTY && !opts.yes;
   const loud = !opts.json && !opts.quiet;
   const ui = deps.ui;
-  const verified = await fetchAndVerify(sourceStr, deps);
+  const verified = await ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps));
   const { workDir, manifest, fingerprint, sourceRecord } = verified;
 
   try {
@@ -614,7 +614,9 @@ function installTargetsLine(manifest) {
 
 export async function runInspect(sourceStr, opts, deps) {
   const ui = deps.ui;
-  const verified = await fetchAndVerify(sourceStr, deps);
+  const verified = await (opts.json || opts.files
+    ? fetchAndVerify(sourceStr, deps)
+    : ui.spin('Fetching and verifying the package', () => fetchAndVerify(sourceStr, deps)));
   const { workDir, manifest } = verified;
   try {
     if (opts.json) {

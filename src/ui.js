@@ -37,7 +37,27 @@ export function makeUi({ stdout = process.stdout, stderr = process.stderr, color
     warn: (s) => write(stdout, `  ${c.yellow('⚠')} ${s}`),
     info: (s) => write(stdout, `  ${c.cyan('ⓘ')} ${s}`),
     fail: (s) => write(stderr, `  ${c.red('✗')} ${s}`),
+    // network-op wrapper; the TTY entrypoint swaps in a real spinner
+    spin: async (_label, fn) => fn(),
   };
+}
+
+// Replace ui.spin with an animated @clack spinner (TTY only).
+export async function attachSpinner(ui) {
+  const clack = await import('@clack/prompts');
+  ui.spin = async (label, fn) => {
+    const s = clack.spinner();
+    s.start(label);
+    try {
+      const result = await fn();
+      s.stop(`${label} — done`);
+      return result;
+    } catch (err) {
+      s.stop(`${label} — failed`, 1);
+      throw err;
+    }
+  };
+  return ui;
 }
 
 // The install/inspect preview, rendered only from verified bytes (§4.2 step 5).

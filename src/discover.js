@@ -68,6 +68,47 @@ export function classifyPath(absPath, isDir) {
   return { type: isDir ? 'bundle' : 'prompt', agent: '' };
 }
 
+// Enumerate every artifact visible from here, across all adapters — powers
+// the interactive picker and name suggestions.
+export async function discoverAll({ cwd, home }) {
+  const out = [];
+  const seen = new Set();
+  for (const id of AGENT_IDS) {
+    for (const loc of AGENTS[id].locations) {
+      const base = loc.scope === 'project' ? cwd : home;
+      const probe = loc.rel('@');
+      const dir = path.join(base, ...probe.slice(0, -1));
+      const suffix = probe[probe.length - 1].replace('@', '');
+      let dirents;
+      try {
+        dirents = await readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const ent of dirents) {
+        let name = null;
+        if (loc.container === 'dir' && ent.isDirectory()) name = ent.name;
+        else if (loc.container === 'file' && ent.isFile() && suffix && ent.name.endsWith(suffix)) {
+          name = artifactBaseName(ent.name);
+        }
+        if (!name || name.startsWith('.')) continue;
+        const root = path.join(dir, ent.name);
+        if (seen.has(root)) continue;
+        seen.add(root);
+        out.push({
+          name,
+          root,
+          isDir: loc.container === 'dir',
+          type: loc.kind,
+          agent: id,
+          scope: loc.scope,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 // List every artifact name visible from here, across all adapters (suggestions).
 export async function knownNames({ cwd, home }) {
   const names = new Set();

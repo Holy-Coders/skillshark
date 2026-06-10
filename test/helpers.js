@@ -160,6 +160,7 @@ export function silentUi() {
     warn: push,
     info: push,
     fail: push,
+    spin: async (_label, fn) => fn(),
     text: () => lines.join('\n'),
   };
 }

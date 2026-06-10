@@ -5,15 +5,17 @@ import os from 'node:os';
 import { CliError } from '../src/errors.js';
 import { VERSION } from '../src/version.js';
 import { getConfigDir } from '../src/config.js';
-import { makeUi, realPrompts } from '../src/ui.js';
+import { makeUi, realPrompts, attachSpinner } from '../src/ui.js';
 import { makeGhApi } from '../src/gh.js';
 import { copyToClipboard } from '../src/clipboard.js';
 import { runShare, runRevoke } from '../src/share.js';
 import { runInstall, runInspect } from '../src/install.js';
+import { runInteractive } from '../src/interactive.js';
 
 const HELP = `skillshark — share agent skills like files
 
 USAGE
+  skillshark                 interactive session (pick, share, install — guided)
   skillshark <command> [options]
 
 COMMANDS
@@ -36,6 +38,7 @@ GLOBAL OPTIONS
   -V, --version    Show version
 
 EXAMPLES
+  skillshark                                interactive: menus for everything below
   skillshark share /j                       share the "j" skill (secret gist)
   skillshark install <gist-url|id>          install a shared skill
   skillshark install <link> --name jmp      install under a different name
@@ -138,7 +141,8 @@ const COMMAND_FLAGS = {
 
 function parseArgv(argv) {
   const [first, ...rest] = argv;
-  if (!first || first === 'help') {
+  if (!first) return { command: 'interactive', opts: {}, positionals: [] };
+  if (first === 'help') {
     return { command: 'help', topic: rest[0] ?? null, opts: {}, positionals: [] };
   }
   if (first === '--help' || first === '-h') return { command: 'help', topic: null, opts: {}, positionals: [] };
@@ -207,15 +211,9 @@ async function main() {
     return 0;
   }
 
-  const known = new Set(['share', 'install', 'inspect', 'revoke']);
+  const known = new Set(['share', 'install', 'inspect', 'revoke', 'interactive']);
   if (!known.has(parsed.command)) {
     throw new CliError(`Unknown command "${parsed.command}". Commands: share, install, inspect, revoke. Try: skillshark --help`, 2);
-  }
-
-  const arg = parsed.positionals[0];
-  if (!arg) {
-    const noun = parsed.command === 'share' ? '<path|name>' : parsed.command === 'revoke' ? '<id|name>' : '<source>';
-    throw new CliError(`Usage: skillshark ${parsed.command} ${noun}. Try: skillshark help ${parsed.command}`, 2);
   }
   if (parsed.positionals.length > 1) {
     throw new CliError(`Too many arguments: ${parsed.positionals.slice(1).join(' ')}`, 2);
@@ -235,6 +233,24 @@ async function main() {
     ghApi: makeGhApi(),
     clipboard: (text) => copyToClipboard(text),
   };
+  if (effectiveTTY) await attachSpinner(ui);
+
+  // no command (TTY) → the interactive session; piped → help text
+  if (parsed.command === 'interactive') {
+    if (!effectiveTTY) {
+      ui.out(HELP);
+      return 0;
+    }
+    return runInteractive(deps);
+  }
+
+  const arg = parsed.positionals[0];
+  if (!arg) {
+    // bare subcommand in a TTY → that command's wizard; piped → usage error
+    if (effectiveTTY) return runInteractive(deps, parsed.command);
+    const noun = parsed.command === 'share' ? '<path|name>' : parsed.command === 'revoke' ? '<id|name>' : '<source>';
+    throw new CliError(`Usage: skillshark ${parsed.command} ${noun}. Try: skillshark help ${parsed.command}`, 2);
+  }
 
   switch (parsed.command) {
     case 'share':

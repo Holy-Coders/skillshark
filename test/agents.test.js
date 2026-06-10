@@ -181,3 +181,36 @@ test('NAME_RE accepts sane names and rejects path-ish ones', () => {
     assert.ok(!NAME_RE.test(bad), bad);
   }
 });
+
+test('discoverAll enumerates artifacts across every adapter, project and global', async () => {
+  const { discoverAll } = await import('../src/discover.js');
+  const cwd = await tmpdir();
+  const home = await tmpdir();
+  await writeTree(
+    {
+      '.claude/skills/jump/SKILL.md': '# j',
+      '.claude/commands/review.md': 'r',
+      '.cursor/rules/tabs.mdc': 't',
+      '.gemini/commands/changelog.toml': 'prompt = "x"',
+      '.github/prompts/fix.prompt.md': 'f',
+    },
+    cwd,
+  );
+  await writeTree(
+    {
+      '.codex/prompts/draftpr.md': 'd',
+      '.config/opencode/command/test.md': 't',
+    },
+    home,
+  );
+  const found = await discoverAll({ cwd, home });
+  const index = Object.fromEntries(found.map((a) => [`${a.agent}:${a.name}`, a]));
+  assert.equal(index['claude-code:jump'].type, 'skill');
+  assert.equal(index['claude-code:review'].type, 'command');
+  assert.equal(index['cursor:tabs'].type, 'rule');
+  assert.equal(index['gemini:changelog'].type, 'command');
+  assert.equal(index['copilot:fix'].type, 'prompt');
+  assert.equal(index['codex:draftpr'].scope, 'global');
+  assert.equal(index['opencode:test'].scope, 'global');
+  assert.equal(found.length, 7);
+});
