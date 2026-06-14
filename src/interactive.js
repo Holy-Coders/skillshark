@@ -86,23 +86,10 @@ async function askSource(deps, { clack }) {
 }
 
 async function wizardInstall(deps, u) {
-  const { clack } = u;
   const source = await askSource(deps, u);
   if (source === null) return { status: 'cancelled' };
-  // Don't write anything until they've decided — offer to read it first.
-  for (;;) {
-    const choice = await clack.select({
-      message: 'Got the link. What now?',
-      options: [
-        { value: 'preview', label: 'Preview it first', hint: 'read SKILL.md before anything is written' },
-        { value: 'install', label: 'Install it', hint: 'verify, confirm, then write' },
-        { value: 'cancel', label: 'Cancel' },
-      ],
-    });
-    if (bail(clack, choice) || choice === 'cancel') return { status: 'cancelled' };
-    if (choice === 'install') return runInstall(source, {}, deps);
-    await runInspect(source, { preview: true }, deps); // loop back to decide
-  }
+  // runInstall itself offers "read it first?" interactively, so just hand off.
+  return runInstall(source, {}, deps);
 }
 
 async function wizardInspect(deps, u) {
@@ -206,7 +193,7 @@ export async function runInteractive(deps, action = null) {
 
   if (action) {
     const result = await WIZARDS[action](deps, u);
-    clack.outro(result?.status === 'cancelled' ? 'Nothing happened. 🦈' : 'Done. 🦈');
+    clack.outro(outroFor(action, result));
     return 0;
   }
 
@@ -224,7 +211,13 @@ export async function runInteractive(deps, action = null) {
     });
     if (bail(clack, choice) || choice === 'quit') break;
     try {
-      await WIZARDS[choice](deps, u);
+      const result = await WIZARDS[choice](deps, u);
+      // Sharing ends with a fresh link on your clipboard — a natural stopping
+      // point, so confirm and exit instead of looping back to the menu.
+      if (choice === 'share' && result?.status === 'shared') {
+        clack.outro(outroFor('share', result));
+        return 0;
+      }
     } catch (err) {
       if (err instanceof CliError) {
         clack.log.error(err.message);
@@ -236,4 +229,14 @@ export async function runInteractive(deps, action = null) {
   }
   clack.outro('Swim safe. 🦈');
   return 0;
+}
+
+function outroFor(action, result) {
+  if (result?.status === 'cancelled') return 'Nothing happened. 🦈';
+  if (action === 'share' && result?.status === 'shared') {
+    return result.copied
+      ? 'Install one-liner copied to your clipboard — paste it to share. 🦈'
+      : 'Share ready — copy the link above. 🦈';
+  }
+  return 'Done. 🦈';
 }

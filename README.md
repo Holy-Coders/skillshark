@@ -58,7 +58,7 @@ skillshark install <gist-id>                               # bare id works too
 skillshark install gh:acme/skills/review@main              # any public repo path
 ```
 
-Interactive installs ask whether to **keep the name or rename it** before anything is written. Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd looks like a project, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`, and:
+Interactive installs first offer to **preview the skill's SKILL.md right in the terminal** (the paste-and-go one-liner receivers run lands here, so the offer reaches everyone), then ask whether to **keep the name or rename it** — all before anything is written. `--preview` shows the body up front without prompting; `--yes` skips both. Skills land in `.claude/skills/<name>/`, commands in `.claude/commands/<name>.md` (project scope when the cwd looks like a project, else `--project`/`--global`/`--dir`). Useful flags: `--yes`, `--force`, `--allow-exec`, `--dir <path>`, and:
 
 - `--name <name>` — install under a different name. The directory/filename changes and the artifact's frontmatter `name:` is rewritten to match, so two variants of the same skill can live side by side.
 - `--agent <id>` — install for a different tool entirely (see below).

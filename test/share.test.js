@@ -87,6 +87,26 @@ test('integration: share builds the exact gist JSON body (description format, pu
   assert.match(deps.ui.text(), /Skipped \.env \(secret pattern\) — pass --force to include/);
 });
 
+test('runShare reports whether the install one-liner reached the clipboard', async () => {
+  const ok = async () => JSON.stringify({ id: 'feedfacefeedfacefeedfacefeedface', history: [{ version: 'r' }] });
+
+  const deps = await senderDeps(); // clipboard stub returns true
+  await makeSkill(deps.cwd, 'demo');
+  deps.ghApi = ok;
+  assert.equal((await runShare('demo', {}, deps)).copied, true);
+
+  const failed = await senderDeps();
+  await makeSkill(failed.cwd, 'demo');
+  failed.ghApi = ok;
+  failed.clipboard = async () => false;
+  assert.equal((await runShare('demo', {}, failed)).copied, false);
+
+  const off = await senderDeps();
+  await makeSkill(off.cwd, 'demo');
+  off.ghApi = ok;
+  assert.equal((await runShare('demo', { noClipboard: true }, off)).copied, false);
+});
+
 test('share --dry-run uploads nothing and prints the file list + fingerprint', async () => {
   const deps = await senderDeps();
   await makeSkill(deps.cwd, 'dry');
