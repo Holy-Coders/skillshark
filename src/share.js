@@ -248,7 +248,7 @@ export async function runShare(arg, opts, deps) {
     ui.out(`  Link only:  ${url}   ${who}`);
     ui.out(`  Undo:       skillshark revoke ${manifest.name}   (deletes the gist)`);
   }
-  return { status: 'shared', id, url, installCommand, fingerprint, encrypted };
+  return { status: 'shared', id, url, installCommand, fingerprint, encrypted, copied };
 }
 
 // --- shares: recall the links you created --------------------------------------

@@ -457,6 +457,34 @@ export async function runInstall(sourceStr, opts, deps) {
       ui.out('');
     }
 
+    // step 5b — interactive receivers get a "read it first?" offer before any
+    // destination is chosen. This is the path the shared one-liner lands on
+    // (npx skillshark install '<link>'), so the preview reaches every receiver,
+    // not just the menu. --preview already printed the body, so skip the offer.
+    if (interactive && !opts.preview) {
+      const docPath = primaryDoc(manifest);
+      if (docPath) {
+        const action = await deps.prompts.select({
+          message: 'Read it before installing?',
+          options: [
+            { value: 'preview', label: `Preview ${docPath}`, hint: 'read it in the terminal first' },
+            { value: 'install', label: 'Install it', hint: 'skip straight to install' },
+            { value: 'cancel', label: 'Cancel' },
+          ],
+        });
+        if (action === null || action === 'cancel') {
+          ui.out('  Cancelled. Nothing was installed.');
+          return { status: 'cancelled' };
+        }
+        if (action === 'preview') {
+          const content = await readFile(path.join(workDir, ...docPath.split('/')), 'utf8');
+          ui.out('');
+          renderMarkdown(ui, content, docPath);
+          ui.out('');
+        }
+      }
+    }
+
     // step 6 — destination: --dir verbatim, or agent + scope (+ rename/conversion)
     let makePlan;
     let installName = opts.name ?? manifest.name;

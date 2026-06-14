@@ -336,8 +336,8 @@ test('interactive install asks keep-or-rename: rename path rewrites name and tar
   const deps = await makeDeps({ routes: gistRoutes(pkg) });
   await mkdir(path.join(deps.cwd, '.claude'), { recursive: true });
   deps.isTTY = true;
-  // name prompt → rename → typed name → scope → final confirm
-  deps.prompts = scriptedPrompts(['rename', 'leapfrog', 'project', true]);
+  // preview offer → install → name prompt → rename → typed name → scope → final confirm
+  deps.prompts = scriptedPrompts(['install', 'rename', 'leapfrog', 'project', true]);
 
   const res = await runInstall(GIST_ID, {}, deps);
   assert.equal(res.status, 'installed');
@@ -351,7 +351,7 @@ test('interactive install asks keep-or-rename: keep path uses the original name'
   const deps = await makeDeps({ routes: gistRoutes(pkg) });
   await mkdir(path.join(deps.cwd, '.claude'), { recursive: true });
   deps.isTTY = true;
-  deps.prompts = scriptedPrompts(['keep', 'project', true]);
+  deps.prompts = scriptedPrompts(['install', 'keep', 'project', true]);
   const res = await runInstall(GIST_ID, {}, deps);
   assert.equal(res.target, path.join(deps.cwd, '.claude', 'skills', 'jump'));
 });
@@ -361,8 +361,8 @@ test('interactive install: invalid typed name re-asks; --name flag skips the pro
   const deps = await makeDeps({ routes: gistRoutes(pkg) });
   await mkdir(path.join(deps.cwd, '.claude'), { recursive: true });
   deps.isTTY = true;
-  // bad name → warned → good name → scope → confirm
-  deps.prompts = scriptedPrompts(['rename', 'bad name!', 'good-name', 'project', true]);
+  // preview offer → install → bad name → warned → good name → scope → confirm
+  deps.prompts = scriptedPrompts(['install', 'rename', 'bad name!', 'good-name', 'project', true]);
   const res = await runInstall(GIST_ID, {}, deps);
   assert.equal(res.target, path.join(deps.cwd, '.claude', 'skills', 'good-name'));
   assert.match(deps.ui.text(), /Try again/);
@@ -371,7 +371,7 @@ test('interactive install: invalid typed name re-asks; --name flag skips the pro
   const deps2 = await makeDeps({ routes: gistRoutes(pkg) });
   await mkdir(path.join(deps2.cwd, '.claude'), { recursive: true });
   deps2.isTTY = true;
-  deps2.prompts = scriptedPrompts(['project', true]);
+  deps2.prompts = scriptedPrompts(['install', 'project', true]);
   const res2 = await runInstall(GIST_ID, { name: 'flagged' }, deps2);
   assert.equal(res2.target, path.join(deps2.cwd, '.claude', 'skills', 'flagged'));
 });

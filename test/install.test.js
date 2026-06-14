@@ -245,6 +245,46 @@ test('inspect --json includes primaryDoc', async () => {
   assert.equal(parsed.primaryDoc, 'SKILL.md');
 });
 
+test('interactive install offers "read it first?"; choosing preview renders the SKILL.md', async () => {
+  const body = '# Brew\n\nGrind, bloom, then pour.\n';
+  const pkg = await makePackage({ 'SKILL.md': body }, { name: 'brew' });
+  const deps = await makeDeps({ routes: gistRoutes(pkg) });
+  deps.isTTY = true;
+  let offered = false;
+  deps.prompts = {
+    select: async ({ message }) => { offered = true; assert.match(message, /Read it before installing/); return 'preview'; },
+    confirm: async () => true,
+    text: async () => null,
+  };
+  const res = await runInstall(GIST_ID, { dir: path.join(deps.cwd, 'brew') }, deps);
+  assert.equal(res.status, 'installed');
+  assert.equal(offered, true, 'the preview offer must fire on the plain interactive install path');
+  assert.match(deps.ui.text(), /Grind, bloom, then pour\./);
+});
+
+test('interactive install preview offer: cancel writes nothing; skip installs without printing the body', async () => {
+  const pkg = await makePackage({ 'SKILL.md': '# Secret\n\nHidden instructions.\n' }, { name: 'sec' });
+
+  const cancelDeps = await makeDeps({ routes: gistRoutes(pkg) });
+  cancelDeps.isTTY = true;
+  const cancelDir = path.join(cancelDeps.cwd, 'sec');
+  cancelDeps.prompts = {
+    select: async () => 'cancel',
+    confirm: async () => { throw new Error('must not reach confirm after cancel'); },
+    text: async () => null,
+  };
+  const cancelled = await runInstall(GIST_ID, { dir: cancelDir }, cancelDeps);
+  assert.equal(cancelled.status, 'cancelled');
+  assert.ok(!existsSync(cancelDir), 'cancel writes nothing');
+
+  const skipDeps = await makeDeps({ routes: gistRoutes(pkg) });
+  skipDeps.isTTY = true;
+  skipDeps.prompts = { select: async () => 'install', confirm: async () => true, text: async () => null };
+  const installed = await runInstall(GIST_ID, { dir: path.join(skipDeps.cwd, 'sec') }, skipDeps);
+  assert.equal(installed.status, 'installed');
+  assert.doesNotMatch(skipDeps.ui.text(), /Hidden instructions\./, 'skipping the preview must not print the body');
+});
+
 // --- §8.16 -------------------------------------------------------------------
 
 test('§8.16 exec spy: gist install+inspect never invoke execFile/gh (recorded fixture, stub throws)', async (t) => {
