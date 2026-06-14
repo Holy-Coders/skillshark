@@ -66,8 +66,12 @@ Interactive installs ask whether to **keep the name or rename it** before anythi
 **inspect** — look before you leap (writes nothing):
 
 ```sh
-skillshark inspect <link> --cat SKILL.md
+skillshark inspect <link>             # summary + verified file tree
+skillshark inspect <link> --preview   # read SKILL.md right in the terminal
+skillshark inspect <link> --cat SKILL.md   # print one specific file
 ```
+
+`--preview` renders the skill's primary markdown — `SKILL.md` for a skill, or the single file for a command/prompt — with light terminal styling, so you read the actual instructions an agent would obey before installing anything. (`install --preview` folds the same body into the pre-confirm preview.)
 
 Inspect downloads, decrypts, and verifies the full package, so what you read is ground truth from checksummed bytes — never sender-declared metadata. (For `--no-encrypt` shares, the gist page itself doubles as a browser preview; encrypted gists show only ciphertext, by design.)
 

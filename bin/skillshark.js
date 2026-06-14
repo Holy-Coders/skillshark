@@ -54,7 +54,7 @@ EXAMPLES
   skillshark install <link> --name jmp      install under a different name
   skillshark install <link> --agent codex   convert for another tool
   skillshark install gh:acme/skills/review  install straight from a repo path
-  skillshark inspect <gist-url> --cat SKILL.md
+  skillshark inspect <gist-url> --preview   read SKILL.md before installing
   skillshark revoke j                       delete the share
 
 AGENTS (share from and install to)
@@ -104,6 +104,8 @@ Sharing needs an authenticated gh (https://cli.github.com). Undo with
                         for bundle packages; skips agent conventions)
       --force           Overwrite an existing, differing artifact
       --allow-exec      Keep executable bits (stripped by default)
+      --preview         Print the skill's primary markdown (SKILL.md) in the
+                        preview, so you read the instructions before confirming
   -q, --quiet           Print only the installed path
       --json            Print { name, type, agent, installedPath, ... }
 
@@ -111,12 +113,16 @@ SkillShark never executes anything from a package. Integrity: per-file sha256
 + tree fingerprint, and the #fp= fragment in the link is enforced.`,
   inspect: `skillshark inspect <source> — look before you leap (writes nothing)
 
-      --cat <path>      Print one file from the package
+      --preview         Render the skill's primary markdown (SKILL.md, or the
+                        command/prompt's single file) right in the terminal
+      --cat <path>      Print one specific file from the package
       --files           File listing only
       --json            Machine-readable summary
 
 Inspect downloads and verifies the full package, then shows you ground truth
-from checksummed bytes. Expired shares still display (only install refuses).`,
+from checksummed bytes. --preview reads the actual instructions an agent would
+obey — for a skill, SKILL.md *is* the payload. Expired shares still display
+(only install refuses).`,
   revoke: `skillshark revoke <id|name> — delete a share you created
 
   -y, --yes             Skip the confirmation prompt
@@ -174,10 +180,12 @@ const COMMAND_FLAGS = {
     'allow-exec': { key: 'allowExec' },
     agent: { takesValue: true, key: 'agent' },
     name: { takesValue: true, key: 'name' },
+    preview: { key: 'preview' },
   },
   inspect: {
     cat: { takesValue: true, key: 'cat' },
     files: { key: 'files' },
+    preview: { key: 'preview' },
   },
   revoke: {},
   shares: {

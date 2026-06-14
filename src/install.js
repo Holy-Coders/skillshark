@@ -18,7 +18,7 @@ import { decryptEnvelope, decodeSecret, MSG_ENCRYPTED_NEEDS_KEY } from './crypt.
 import { inferMetadata, findExternalRefs } from './discover.js';
 import { AGENTS, AGENT_IDS, getAgent, detectAgents, extractCanonical, rewriteFrontmatterName, NAME_RE } from './agents.js';
 import { addInstallRecord } from './config.js';
-import { renderPreview, renderFileTree, humanSize, displayPath, plural } from './ui.js';
+import { renderPreview, renderFileTree, renderMarkdown, humanSize, displayPath, plural } from './ui.js';
 import { VERSION } from './version.js';
 
 const DAY_MS = 86400000;
@@ -131,6 +131,23 @@ export function expiredMessage(manifest, now = Date.now()) {
     `The sender marked this share as expired ${plural(days, 'day')} ago.\n` +
     `The files still exist until they prune — ask for a fresh link:  skillshark share ${manifest.name}`
   );
+}
+
+// --- primary document (for --preview) ----------------------------------------
+// The one file a reader should look at first: a skill's SKILL.md is the payload;
+// a command/prompt/rule is its single markdown file. Falls back to a lone
+// markdown, a README, or the first markdown so preview always has something.
+export function primaryDoc(manifest) {
+  const files = manifest.files ?? [];
+  const skill = files.find((f) => f.path === 'SKILL.md');
+  if (skill) return skill.path;
+  const md = files.filter((f) => /\.(md|mdc|markdown)$/i.test(f.path));
+  if (md.length === 1) return md[0].path;
+  if (files.length === 1) return files[0].path;
+  const readme = files.find((f) => /(^|\/)readme\.md$/i.test(f.path));
+  if (readme) return readme.path;
+  if (md.length) return md[0].path;
+  return null;
 }
 
 // --- conflict diff (§4.2 step 7) ----------------------------------------------
@@ -429,6 +446,14 @@ export async function runInstall(sourceStr, opts, deps) {
     );
     if (loud) {
       renderPreview(ui, { manifest, fingerprint, fpFromLink: verified.fpVerified, externalRefs });
+      if (opts.preview) {
+        const docPath = primaryDoc(manifest);
+        if (docPath) {
+          const content = await readFile(path.join(workDir, ...docPath.split('/')), 'utf8');
+          ui.out('');
+          renderMarkdown(ui, content, docPath);
+        }
+      }
       ui.out('');
     }
 
@@ -678,6 +703,7 @@ export async function runInspect(sourceStr, opts, deps) {
         fpVerified: verified.fpVerified,
         dependencies: manifest.dependencies ?? [],
         installTargets: AGENT_IDS.filter((id) => AGENTS[id].mapKind(manifest.type) !== null),
+        primaryDoc: primaryDoc(manifest),
       }, null, 2));
       return { status: 'inspected' };
     }
@@ -707,6 +733,20 @@ export async function runInspect(sourceStr, opts, deps) {
       ui.out(`  ── ${f.path} ${'─'.repeat(Math.max(4, 56 - f.path.length))}`);
       ui.raw(content.endsWith('\n') ? content : content + '\n');
       ui.out(`  ${'─'.repeat(60)}`);
+    } else if (opts.preview) {
+      const docPath = primaryDoc(manifest);
+      ui.out('');
+      if (!docPath) {
+        ui.warn('No markdown document to preview in this package.');
+        renderFileTree(ui, manifest);
+      } else {
+        const content = await readFile(path.join(workDir, ...docPath.split('/')), 'utf8');
+        renderMarkdown(ui, content, docPath);
+        if (manifest.files.length > 1) {
+          ui.out('');
+          ui.out(`  ${plural(manifest.files.length - 1, 'other file')} in the package — drop --preview to list them, or --cat <path> to print one.`);
+        }
+      }
     } else {
       ui.out('');
       renderFileTree(ui, manifest);

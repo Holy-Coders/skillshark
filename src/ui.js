@@ -100,6 +100,40 @@ export function renderFileTree(ui, manifest) {
   });
 }
 
+// Render a markdown document for in-terminal reading. Styling is decoration
+// only — the raw bytes are never altered, just framed and lightly highlighted
+// (headings bold, fenced code dim, bullets marked) so the skill's instructions
+// are legible before you install. On a dumb pipe the text still reads fine.
+export function renderMarkdown(ui, content, label = 'preview') {
+  const c = ui.colors;
+  ui.out(`  ── ${c.bold(label)} ${'─'.repeat(Math.max(4, 56 - label.length))}`);
+  const body = content.endsWith('\n') ? content.slice(0, -1) : content;
+  let inFence = false;
+  for (const line of body.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      ui.out(c.dim(line));
+      continue;
+    }
+    if (inFence) {
+      ui.out(c.dim(line));
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      ui.out(c.bold(c.cyan(heading[2])));
+      continue;
+    }
+    const bullet = /^(\s*)([-*+])\s+(.*)$/.exec(line);
+    if (bullet) {
+      ui.out(`${bullet[1]}${c.cyan('•')} ${bullet[3]}`);
+      continue;
+    }
+    ui.out(line);
+  }
+  ui.out(`  ${'─'.repeat(60)}`);
+}
+
 // Interactive prompt seam — the install pipeline calls deps.prompts.* so tests
 // can stub it; this is the real @clack implementation, loaded lazily so the
 // receive path in non-TTY/CI never even imports it.

@@ -86,9 +86,23 @@ async function askSource(deps, { clack }) {
 }
 
 async function wizardInstall(deps, u) {
+  const { clack } = u;
   const source = await askSource(deps, u);
   if (source === null) return { status: 'cancelled' };
-  return runInstall(source, {}, deps);
+  // Don't write anything until they've decided — offer to read it first.
+  for (;;) {
+    const choice = await clack.select({
+      message: 'Got the link. What now?',
+      options: [
+        { value: 'preview', label: 'Preview it first', hint: 'read SKILL.md before anything is written' },
+        { value: 'install', label: 'Install it', hint: 'verify, confirm, then write' },
+        { value: 'cancel', label: 'Cancel' },
+      ],
+    });
+    if (bail(clack, choice) || choice === 'cancel') return { status: 'cancelled' };
+    if (choice === 'install') return runInstall(source, {}, deps);
+    await runInspect(source, { preview: true }, deps); // loop back to decide
+  }
 }
 
 async function wizardInspect(deps, u) {
@@ -96,17 +110,19 @@ async function wizardInspect(deps, u) {
   const source = await askSource(deps, u);
   if (source === null) return { status: 'cancelled' };
   await runInspect(source, {}, deps);
-  const next = await clack.select({
-    message: 'And now?',
-    options: [
-      { value: 'install', label: 'Install it' },
-      { value: 'done', label: 'Done' },
-    ],
-  });
-  if (!bail(clack, next) && next === 'install') {
-    return runInstall(source, {}, deps);
+  for (;;) {
+    const next = await clack.select({
+      message: 'And now?',
+      options: [
+        { value: 'preview', label: 'Preview the markdown', hint: 'read SKILL.md in the terminal' },
+        { value: 'install', label: 'Install it' },
+        { value: 'done', label: 'Done' },
+      ],
+    });
+    if (bail(clack, next) || next === 'done') return { status: 'inspected' };
+    if (next === 'install') return runInstall(source, {}, deps);
+    await runInspect(source, { preview: true }, deps); // preview, then ask again
   }
-  return { status: 'inspected' };
 }
 
 // --- my-shares wizard ----------------------------------------------------------------
