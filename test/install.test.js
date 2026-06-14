@@ -6,7 +6,7 @@ import { readFile, stat, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runInstall, runInspect, diffTrees, expiryState } from '../src/install.js';
+import { runInstall, runInspect, diffTrees, expiryState, primaryDoc } from '../src/install.js';
 import { CliError, MSG } from '../src/errors.js';
 import { loadInstalls } from '../src/config.js';
 import {
@@ -193,6 +193,56 @@ test('§8.15 matching #fp= verifies and reports "matches" in inspect', async () 
   const link = `https://gist.github.com/${GIST_ID}#fp=${pkg.fingerprint.slice(0, 8)}`;
   await runInspect(link, {}, deps);
   assert.match(deps.ui.text(), /matches the link/);
+});
+
+// --- preview -----------------------------------------------------------------
+
+test('primaryDoc picks SKILL.md for skills, the lone markdown otherwise, with fallbacks', () => {
+  assert.equal(primaryDoc({ files: [{ path: 'reference.md' }, { path: 'SKILL.md' }] }), 'SKILL.md');
+  assert.equal(primaryDoc({ files: [{ path: 'draftpr.md' }] }), 'draftpr.md');
+  assert.equal(primaryDoc({ files: [{ path: 'rule.mdc' }] }), 'rule.mdc');
+  // multiple markdowns, no SKILL.md → prefer a README, else the first
+  assert.equal(primaryDoc({ files: [{ path: 'a.md' }, { path: 'README.md' }] }), 'README.md');
+  assert.equal(primaryDoc({ files: [{ path: 'b.md' }, { path: 'a.md' }] }), 'b.md');
+  // nothing markdown-ish and more than one file → null
+  assert.equal(primaryDoc({ files: [{ path: 'a.json' }, { path: 'b.bin' }] }), null);
+});
+
+test('inspect --preview renders the SKILL.md body in the terminal', async () => {
+  const body = '# Coffee\n\nBrew a great cup.\n\n- grind fresh\n- bloom 30s\n';
+  const pkg = await makePackage({ 'SKILL.md': body, 'notes.txt': 'aside' }, { name: 'coffee' });
+  const deps = await makeDeps({ routes: gistRoutes(pkg) });
+  await runInspect(GIST_ID, { preview: true }, deps);
+  const text = deps.ui.text();
+  assert.match(text, /Coffee/);
+  assert.match(text, /Brew a great cup\./);
+  assert.match(text, /grind fresh/);
+  // still the verified summary, and a hint that other files exist
+  assert.match(text, /coffee/);
+  assert.match(text, /1 other file/);
+});
+
+test('inspect --preview on a package with no markdown warns and falls back to the tree', async () => {
+  const pkg = await makePackage({ 'data.json': '{}', 'blob.bin': 'x' }, { name: 'nodoc', type: 'bundle', agent: '' });
+  const deps = await makeDeps({ routes: gistRoutes(pkg) });
+  await runInspect(GIST_ID, { preview: true }, deps);
+  assert.match(deps.ui.text(), /No markdown document to preview/);
+});
+
+test('install --preview prints the markdown body before installing', async () => {
+  const pkg = await makePackage({ 'SKILL.md': '# Hello\n\nDo the thing.\n' }, { name: 'hello' });
+  const deps = await makeDeps({ routes: gistRoutes(pkg) });
+  const res = await runInstall(GIST_ID, { yes: true, preview: true, dir: path.join(deps.cwd, 'hello') }, deps);
+  assert.equal(res.status, 'installed');
+  assert.match(deps.ui.text(), /Do the thing\./);
+});
+
+test('inspect --json includes primaryDoc', async () => {
+  const pkg = await makePackage({ 'SKILL.md': '# x', 'a.md': 'a' }, { name: 'jd' });
+  const deps = await makeDeps({ routes: gistRoutes(pkg) });
+  await runInspect(GIST_ID, { json: true }, deps);
+  const parsed = JSON.parse(deps.ui.text());
+  assert.equal(parsed.primaryDoc, 'SKILL.md');
 });
 
 // --- §8.16 -------------------------------------------------------------------

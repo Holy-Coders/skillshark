@@ -230,6 +230,13 @@
     color: var(--foam); font-size: 12.5px;
   }
   .cmd pre .c-dim { color: var(--faint); }
+  /* On phones the example lines are wider than the card — wrap them instead of
+     forcing a horizontal scrollbar inside every command. */
+  @media (max-width: 560px) {
+    .cmds { gap: 14px; }
+    .cmd { padding: 16px; }
+    .cmd pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  }
 
   /* ---- agents table + shell blocks ---- */
   .lead { color: var(--dim); max-width: 72ch; font-size: 14px; }
@@ -281,6 +288,8 @@
     user-select: none;
   }
   .shark-art .eye { color: var(--glow); text-shadow: 0 0 10px var(--glow); }
+  .shark-art .fin-top { color: var(--glow); text-shadow: 0 0 12px var(--glow-soft); }
+  .shark-art .fin-body { color: var(--faint); opacity: .8; }
   @keyframes lurk { from { transform: translateY(0) } to { transform: translateY(10px) } }
   .abyss-line { color: var(--faint); font-size: 12px; letter-spacing: .25em; margin-top: 34px; }
   .foot-links { margin-top: 18px; color: var(--dim); font-size: 13px; }
@@ -391,8 +400,9 @@ $ skillshark install gh:acme/skills/review@main</pre>
       </div>
       <div class="cmd reveal">
         <h3><span class="verb">inspect</span> &lt;source&gt;</h3>
-        <p>Look before you leap — full download + verification, zero writes. Read any packaged file.</p>
-        <pre>$ skillshark inspect &lt;link&gt; --cat SKILL.md</pre>
+        <p>Look before you leap — full download + verification, zero writes. <strong style="color:var(--foam);font-weight:600">--preview</strong> renders the skill's SKILL.md right in your terminal; --cat prints any single file.</p>
+        <pre>$ skillshark inspect &lt;link&gt; --preview
+$ skillshark inspect &lt;link&gt; --cat SKILL.md</pre>
       </div>
       <div class="cmd reveal">
         <h3><span class="verb">shares</span> [name]</h3>
@@ -413,7 +423,7 @@ $ skillshark shares j   <span class="c-dim"># copies the install one-liner again
       </div>
     </div>
     <p class="grid-note reveal">Prefer menus? Run bare <code>skillshark</code> for an interactive session: a picker over
-    every skill on your machine, paste-a-link installs with a keep-or-rename prompt, share recall, guided revokes, spinners on the slow parts.
+    every skill on your machine, paste-a-link installs that offer to <em>preview the SKILL.md first</em> with a keep-or-rename prompt, share recall, guided revokes, spinners on the slow parts.
     Bare <code>skillshark share</code> / <code>install</code> / <code>inspect</code> / <code>revoke</code> jump straight to that command's wizard.</p>
     <p class="grid-note reveal" style="margin-top:14px">SkillShark dogfoods itself — there's a Claude Code skill that drives the CLI for you,
     installed (of course) with <code>npx skillshark install '&lt;link&gt;'</code>. Inside Claude Code,
@@ -491,20 +501,17 @@ $ skillshark share j --host ghe.corp.com
   <!-- ================= THE DEEP ================= -->
   <footer>
     <span class="depth">10 911 m · challenger deep</span>
-    <div class="shark-art" aria-hidden="true">                                      |\
-                                      | \
-                                      |  \
-                                      ;   \
-                                      :    \
-                                      :     \
-   \,         ________,,,---''''       ''---,,,_______
-    \\  ,,-'''                                        ''--,_
-     \\'                    s k i l l s h a r k            ''-,_
-      X:,          ((((                          <span class="eye">o</span>              '=,&gt;
-     //.,,               ____________________                _,,-''
-    //    '''---,,,,---''     \  \          ''---,,,,,---'''
-   /'                          \  '-,_
-                                '-,,_ '</div>
+    <div class="shark-art" aria-hidden="true"><span class="fin-top">                    |\
+                    | \
+                    |  \
+                    ;   \
+                    :    \</span>
+
+<span class="fin-body">  \      _____,,--''      ''--,,______
+   \ ,-''                             ''-,_
+    X.          (((            <span class="eye">o</span>          '=,&gt;
+   / '--,,_______________   ______,,,---''
+  /                      '-,'</span></div>
     <p class="abyss-line">YOU HAVE REACHED THE BOTTOM · NOTHING IS RUNNING DOWN HERE</p>
     <p class="no-server">there is no server — github is the backend</p>
     <div class="foot-links">

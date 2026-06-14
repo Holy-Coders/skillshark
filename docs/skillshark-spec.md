@@ -107,6 +107,7 @@ Accepted sources: a gist URL, a bare 32-hex gist id, or `gh:owner/repo[/path][@r
 ### 1.6 `inspect` flags
 
 ```
+    --preview        Render the primary markdown (SKILL.md) in the terminal
     --cat <path>     Print one file from the package
     --files          File listing only
     --json           Machine-readable summary
